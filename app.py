@@ -61,7 +61,7 @@ def load_sheet_data(sheet_name: str):
         for tab in ["Hot_Leads", "Good_Leads", "Review_Queue", "All_Leads", "Run_Log"]:
             try:
                 rows = sheet.worksheet(tab).get_all_records()
-                tabs[tab] = pd.DataFrame(rows) if rows else pd.DataFrame()
+                tabs[tab] = _clean_df(pd.DataFrame(rows)) if rows else pd.DataFrame()
             except Exception:
                 tabs[tab] = pd.DataFrame()
         return tabs
@@ -88,6 +88,17 @@ def load_run_history(sheet_name: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _clean_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    for col in out.columns:
+        out[col] = out[col].apply(
+            lambda v: "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
+        )
+    return out
+
+
 def load_checkpoints() -> list[dict]:
     checkpoints = []
     if not RUNS_DIR.exists():
@@ -104,6 +115,16 @@ def load_checkpoints() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Pipeline runner
 # ---------------------------------------------------------------------------
+
+class PipelineState:
+    def __init__(self):
+        self.lines: list[str] = []
+        self.running: bool = False
+        self.done: bool = False
+
+
+_pipeline_state = PipelineState()
+
 
 def run_pipeline(limit: int, sheet_name: str) -> None:
     state = load_state()
@@ -125,7 +146,8 @@ def run_pipeline(limit: int, sheet_name: str) -> None:
     )
     for line in iter(proc.stdout.readline, ""):
         if line:
-            st.session_state["log_lines"].append(line.rstrip())
+            _pipeline_state.lines.append(line.rstrip())
+    _pipeline_state.done = True
 
 
 # ---------------------------------------------------------------------------
@@ -148,10 +170,6 @@ st.sidebar.caption("Built with Streamlit")
 # Shared state
 # ---------------------------------------------------------------------------
 
-if "log_lines" not in st.session_state:
-    st.session_state["log_lines"] = []
-if "running" not in st.session_state:
-    st.session_state["running"] = False
 if "selected_sheet" not in st.session_state:
     state = load_state()
     try:
@@ -319,7 +337,7 @@ elif page == "📋 Leads":
             if st.download_button(
                 f"⬇️ Download {tab_name} CSV",
                 data=filtered.to_csv(index=False).encode("utf-8"),
-                file=f"leads_{tab_name.replace(' ', '_').lower()}.csv",
+                file_name=f"leads_{tab_name.replace(' ', '_').lower()}.csv",
                 mime="text/csv",
                 key=f"dl_{tab_name[:2]}",
             ):
@@ -353,41 +371,46 @@ elif page == "▶️ Run":
         run_pressed = st.button(
             "🚀 Run Pipeline",
             type="primary",
-            use_container_width=True,
-            disabled=st.session_state.get("running", False),
+            disabled=_pipeline_state.running,
         )
 
     st.markdown("---")
 
-    if run_pressed and not st.session_state.get("running"):
-        st.session_state["running"] = True
-        st.session_state["log_lines"] = []
+    if run_pressed and not _pipeline_state.running:
+        _pipeline_state.running = True
+        _pipeline_state.done = False
+        _pipeline_state.lines = []
 
         progress_placeholder = st.empty()
         log_placeholder = st.empty()
 
         progress_placeholder.info("🔄 Pipeline running... This can take 15-30 minutes for 30 leads.")
 
-        thread = threading.Thread(target=run_pipeline, args=(limit, st.session_state["selected_sheet"]), daemon=True)
+        thread = threading.Thread(
+            target=run_pipeline,
+            args=(limit, st.session_state["selected_sheet"]),
+            daemon=True,
+        )
         thread.start()
 
         import time
-        while thread.is_alive():
+        while thread.is_alive() or not _pipeline_state.done:
             time.sleep(2)
-            if st.session_state["log_lines"]:
-                recent = st.session_state["log_lines"][-50:]
+            if _pipeline_state.lines:
+                recent = _pipeline_state.lines[-50:]
                 log_placeholder.code("\n".join(recent), language=None)
+            st.rerun()
 
         thread.join()
-        st.session_state["running"] = False
+        _pipeline_state.running = False
 
-        st.session_state["log_lines"].append("✅ Pipeline finished!")
+        _pipeline_state.lines.append("✅ Pipeline finished!")
         st.success("✅ Pipeline finished! Refresh the page to see updated lead counts.")
-        st.session_state["log_lines"] = []
+        st.rerun()
 
-    if st.session_state.get("log_lines"):
+    if _pipeline_state.lines:
         st.subheader("Pipeline Log")
-        st.code("\n".join(st.session_state["log_lines"][-80:]), language=None)
+        st.code("\n".join(_pipeline_state.lines[-80:]), language=None)
 
     st.markdown("---")
     st.subheader("Checkpoints from previous runs")
@@ -431,21 +454,21 @@ elif page == "⚙️ Settings":
                 "Google Sheet",
             ],
             "Value": [
-                settings.enable_ai,
-                settings.hot_lead_threshold,
-                settings.good_lead_threshold,
-                settings.max_discovery_queries,
-                settings.discovery_delay_seconds,
-                settings.max_search_results_per_query,
-                5,
-                settings.website_delay_seconds,
-                settings.ddgs_timeout_seconds,
-                settings.max_pages_per_site,
-                settings.request_timeout_seconds,
+                str(settings.enable_ai),
+                str(settings.hot_lead_threshold),
+                str(settings.good_lead_threshold),
+                str(settings.max_discovery_queries),
+                str(settings.discovery_delay_seconds),
+                str(settings.max_search_results_per_query),
+                "5",
+                str(settings.website_delay_seconds),
+                str(settings.ddgs_timeout_seconds),
+                str(settings.max_pages_per_site),
+                str(settings.request_timeout_seconds),
                 st.session_state["selected_sheet"],
             ],
         }
-        st.dataframe(pd.DataFrame(settings_data), hide_index=True, use_container_width=True)
+        st.dataframe(_clean_df(pd.DataFrame(settings_data)), hide_index=True)
     except Exception as exc:
         st.error(f"Could not load settings: {exc}")
 
@@ -481,7 +504,7 @@ elif page == "⚙️ Settings":
                 len(COACH_PLATFORM_DOMAINS),
             ],
         }
-        st.dataframe(pd.DataFrame(kws), hide_index=True, use_container_width=True)
+        st.dataframe(_clean_df(pd.DataFrame(kws)), hide_index=True)
     except Exception as exc:
         st.error(f"Could not load keywords: {exc}")
 
