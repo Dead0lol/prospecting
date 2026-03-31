@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from typing import Dict, Iterable, List
 
@@ -11,6 +12,43 @@ from config.settings import settings
 def _log(message: str) -> None:
     stamp = time.strftime("%H:%M:%S")
     print(f"[{stamp}] [discovery] {message}", flush=True)
+
+
+def _search_ddgs_once(query: str, max_results: int, region: str, safesearch: str) -> List[Dict[str, str]]:
+    hits: List[Dict[str, str]] = []
+    with DDGS(timeout=settings.ddgs_timeout_seconds) as ddgs:
+        for result in ddgs.text(
+            query,
+            max_results=max_results,
+            backend="html",
+            region=region,
+            safesearch=safesearch,
+        ):
+            href = result.get("href") or result.get("url") or ""
+            title = result.get("title") or ""
+            body = result.get("body") or ""
+            if not href:
+                continue
+            hits.append({"query": query, "url": href, "title": title, "body": body})
+    return hits
+
+
+def _query_variants(query: str) -> List[str]:
+    variants = [query]
+    if "site:instagram.com" not in query:
+        return variants
+
+    base = query.replace('site:instagram.com', '').strip()
+    unquoted = re.sub(r'"', '', base)
+    collapsed = re.sub(r'\s+', ' ', unquoted).strip()
+
+    for variant in [
+        f"site:instagram.com {collapsed}",
+        f'{collapsed} site:instagram.com',
+    ]:
+        if variant and variant not in variants:
+            variants.append(variant)
+    return variants
 
 
 def build_queries(keywords: Iterable[str], cities: Iterable[str], modifiers: Iterable[str]) -> List[str]:
@@ -47,21 +85,36 @@ def build_queries(keywords: Iterable[str], cities: Iterable[str], modifiers: Ite
 
 def search_query(query: str, max_results: int | None = None) -> List[Dict[str, str]]:
     max_results = max_results or settings.max_search_results_per_query
-    hits: List[Dict[str, str]] = []
-
     _log(f"searching: {query[:80]}")
-    try:
-        with DDGS(timeout=settings.ddgs_timeout_seconds) as ddgs:
-            for result in ddgs.text(query, max_results=max_results, backend="html"):
-                href = result.get("href") or result.get("url") or ""
-                title = result.get("title") or ""
-                body = result.get("body") or ""
-                if not href:
-                    continue
-                hits.append({"query": query, "url": href, "title": title, "body": body})
-    except Exception as exc:
-        _log(f"search error: {exc}")
+    attempts = []
+    for variant in _query_variants(query):
+        attempts.extend([
+            (variant, "us-en", "off"),
+            (variant, "wt-wt", "off"),
+        ])
 
+    hits: List[Dict[str, str]] = []
+    seen_urls: set[str] = set()
+    last_error = ""
+    for index, (variant, region, safesearch) in enumerate(attempts, start=1):
+        try:
+            if index > 1:
+                _log(f"retry {index - 1}: {variant[:80]} region={region} safesearch={safesearch}")
+            batch = _search_ddgs_once(variant, max_results, region, safesearch)
+            for hit in batch:
+                if hit["url"] in seen_urls:
+                    continue
+                seen_urls.add(hit["url"])
+                hit["query"] = query
+                hits.append(hit)
+            if hits:
+                break
+        except Exception as exc:
+            last_error = str(exc)
+            _log(f"search error: {exc}")
+
+    if not hits and last_error:
+        _log(f"all retries failed for query: {query[:80]}")
     _log(f"got {len(hits)} hits")
     time.sleep(settings.discovery_delay_seconds)
     return hits

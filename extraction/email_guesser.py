@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import re
 import time
 from typing import List
-
-from config.settings import settings
-from verification.smtp_verifier import is_catch_all_domain, verify_email_address
 
 
 def _log(message: str) -> None:
@@ -40,14 +36,9 @@ def _extract_real_name(contact_name: str) -> tuple[str, str]:
 
 
 def guess_emails(contact_name: str, domain: str) -> List[str]:
-    """Generate common email patterns and verify. Stop on first valid hit."""
+    """Generate likely email patterns without doing SMTP checks inline."""
     if not domain:
         return []
-
-    # Skip domains that accept everything (catch-all) - pointless to guess
-    if is_catch_all_domain(domain):
-        _log(f"{domain} is catch-all, skipping guesses")
-        return [f"hello@{domain}"]  # return generic, mark as catch-all later
 
     first, last = _extract_real_name(contact_name) if contact_name else ("", "")
 
@@ -72,19 +63,7 @@ def guess_emails(contact_name: str, domain: str) -> List[str]:
             seen.add(g)
             unique_guesses.append(g)
 
-    # Try all patterns but stop after 3 SMTP checks or first valid hit
-    smtp_checks = 0
-    max_smtp_checks = 3
-    for guess in unique_guesses:
-        if smtp_checks >= max_smtp_checks:
-            _log(f"reached max {max_smtp_checks} SMTP checks, stopping")
-            break
-        _log(f"trying {guess}")
-        result = verify_email_address(guess)
-        smtp_checks += 1
-        if result == "valid":
-            _log(f"found valid email: {guess}")
-            return [guess]
-        time.sleep(0.5)
+    for guess in unique_guesses[:3]:
+        _log(f"candidate {guess}")
 
-    return []
+    return unique_guesses[:3]

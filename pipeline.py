@@ -6,6 +6,7 @@ import re
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
@@ -32,6 +33,26 @@ def log(message: str) -> None:
     stamp = datetime.now().strftime("%H:%M:%S")
     safe = message.encode("ascii", errors="replace").decode("ascii")
     print(f"[{stamp}] {safe}", flush=True)
+
+
+CHECKPOINT_DIR = settings.output_cache_dir / "runs"
+CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+CHECKPOINT_EVERY = 10
+
+
+def checkpoint_path(run_id: str) -> Path:
+    return CHECKPOINT_DIR / f"{run_id}.json"
+
+
+def save_checkpoint(leads: List[Lead], run_id: str, country: str) -> None:
+    payload = {
+        "run_id": run_id,
+        "country": country,
+        "lead_count": len(leads),
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "leads": [lead.to_dict() for lead in leads],
+    }
+    checkpoint_path(run_id).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -616,40 +637,55 @@ def run(country: str = "US", limit: int = 100) -> List[Lead]:
 
     # Process WEBSITE candidates first — they produce higher-quality leads
     # because we already have their domain (no guessing needed)
-    if web_candidates:
-        log(f"--- Processing {len(web_candidates)} website candidates ---")
-        tried = 0
-        for candidate in web_candidates:
-            if tried >= limit * 3:  # Don't try forever
-                break
-            tried += 1
-            lead = process_website_candidate(candidate, country)
-            if lead:
-                lead.run_id = run_id
-                leads.append(lead)
+    interrupted = False
+    try:
+        if web_candidates:
+            log(f"--- Processing {len(web_candidates)} website candidates ---")
+            tried = 0
+            for candidate in web_candidates:
+                if tried >= limit * 3:  # Don't try forever
+                    break
+                tried += 1
+                lead = process_website_candidate(candidate, country)
+                if lead:
+                    lead.run_id = run_id
+                    leads.append(lead)
+                    if len(leads) % CHECKPOINT_EVERY == 0:
+                        save_checkpoint(leads, run_id, country)
+                        log(f"Checkpoint saved: {len(leads)} leads")
+                    if len(leads) >= limit:
+                        break
+
+        # Fill remaining slots from Instagram candidates
+        remaining = limit - len(leads)
+        if remaining > 0 and ig_candidates:
+            log(f"--- Processing IG candidates (need {remaining} more) ---")
+            for i, candidate in enumerate(ig_candidates, 1):
+                if i > remaining * 2:  # Don't try too many
+                    break
+                log(f"[{i}/{len(ig_candidates)}]")
+                lead = process_instagram_candidate(candidate, country)
+                if lead:
+                    lead.run_id = run_id
+                    leads.append(lead)
+                    if len(leads) % CHECKPOINT_EVERY == 0:
+                        save_checkpoint(leads, run_id, country)
+                        log(f"Checkpoint saved: {len(leads)} leads")
                 if len(leads) >= limit:
                     break
-
-    # Fill remaining slots from Instagram candidates
-    remaining = limit - len(leads)
-    if remaining > 0 and ig_candidates:
-        log(f"--- Processing IG candidates (need {remaining} more) ---")
-        for i, candidate in enumerate(ig_candidates, 1):
-            if i > remaining * 2:  # Don't try too many
-                break
-            log(f"[{i}/{len(ig_candidates)}]")
-            lead = process_instagram_candidate(candidate, country)
-            if lead:
-                lead.run_id = run_id
-                leads.append(lead)
-            if len(leads) >= limit:
-                break
+    except KeyboardInterrupt:
+        interrupted = True
+        log("Interrupted - returning partial results")
 
     leads = deduplicate_leads(leads)
     verify_leads_in_batch(leads)
     for lead in leads:
         classify_and_score(lead)
-    log(f"=== Pipeline done: {len(leads)} leads after dedup ===")
+    save_checkpoint(leads, run_id, country)
+    if interrupted:
+        log(f"=== Pipeline interrupted: {len(leads)} leads after dedup ===")
+    else:
+        log(f"=== Pipeline done: {len(leads)} leads after dedup ===")
     return leads
 
 
