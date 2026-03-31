@@ -1,3 +1,14 @@
+"""
+DuckDuckGo search module for fitness coach prospecting.
+
+Uses the `ddgs` library (ddgstealth). All queries are keyword-based — geography is
+irrelevant since the ICP is any English-speaking fitness coach globally.
+
+Query rotation: Each run picks up where the last run left off, so different
+keyword subsets are searched each time. The full query pool is large enough that
+it takes many runs to exhaust it.
+"""
+
 from __future__ import annotations
 
 import re
@@ -34,74 +45,68 @@ def _search_ddgs_once(query: str, max_results: int, region: str, safesearch: str
 
 
 def _query_variants(query: str) -> List[str]:
+    """Generate alternate query forms for the same intent. DDG is inconsistent
+    across region/safesearch combos, so we try the query as-is and a collapsed version."""
     variants = [query]
     if "site:instagram.com" not in query:
         return variants
 
-    base = query.replace('site:instagram.com', '').strip()
-    unquoted = re.sub(r'"', '', base)
-    collapsed = re.sub(r'\s+', ' ', unquoted).strip()
+    base = query.replace("site:instagram.com", "").strip()
+    unquoted = re.sub(r'"', "", base)
+    collapsed = re.sub(r"\s+", " ", unquoted).strip()
 
     for variant in [
         f"site:instagram.com {collapsed}",
-        f'{collapsed} site:instagram.com',
+        f"{collapsed} site:instagram.com",
     ]:
         if variant and variant not in variants:
             variants.append(variant)
     return variants
 
 
-def build_queries(keywords: Iterable[str], cities: Iterable[str], modifiers: Iterable[str]) -> List[str]:
-    """Build queries interleaved so first N queries cover many keywords, cities, AND both IG+web types."""
+def build_queries(
+    keywords: Iterable[str],
+    modifiers: Iterable[str],
+    platforms: Iterable[str] | None = None,
+) -> List[str]:
+    """Build a flat, diversified query list from keywords and modifiers.
+
+    No city/geo logic. Each keyword gets interleaved with modifiers so early
+    query cuts still give broad coverage. Platforms are searched directly too.
+    """
     kw_list = list(keywords)
-    city_list = list(cities)
     mod_list = list(modifiers)
-
-    # Generate keyword-city combos in diversified order using diagonal walk:
-    # (kw0,city0), (kw1,city1), (kw2,city2), ... wrapping cities.
-    # This ensures first N combos cover N different keywords and spread across cities.
-    combos: List[tuple[str, str]] = []
-    for offset in range(len(city_list)):
-        for ki in range(len(kw_list)):
-            ci = (ki + offset) % len(city_list)
-            combos.append((kw_list[ki], city_list[ci]))
-
-    # Interleave: IG query, web query, IG query, web query, ...
-    # This guarantees that no matter where early-stopping cuts off,
-    # we have roughly equal IG and web queries.
+    plat_list = list(platforms) if platforms else []
     queries: List[str] = []
-    for keyword, city in combos:
-        queries.append(f'"{keyword}" "{city}" site:instagram.com')
-        queries.append(f'"{keyword}" "{city}"')
-        queries.append(f'"{keyword}" "{city}" site:linktr.ee')
-        queries.append(f'"{keyword}" "{city}" site:beacons.ai')
-        queries.append(f'"{keyword}" "{city}" site:stan.store')
 
-    # Add keyword-only queries so we also discover remote coaches that do not
-    # rank for city-specific searches.
-    for keyword in kw_list:
-        queries.append(f'"{keyword}" site:instagram.com')
-        queries.append(f'"{keyword}"')
-        queries.append(f'"{keyword}" site:linktr.ee')
-        queries.append(f'"{keyword}" site:beacons.ai')
-        queries.append(f'"{keyword}" site:stan.store')
+    # Primary: keyword alone (widest net)
+    for kw in kw_list:
+        queries.append(f'"{kw}"')
 
-    # Modifier queries at the end (lower priority, web-only)
-    for city in city_list:
+    # Secondary: keyword + modifier (action/intent signals)
+    for kw in kw_list:
         for mod in mod_list:
-            for keyword in kw_list:
-                queries.append(f'"{keyword}" "{city}" "{mod}"')
-                queries.append(f'"{keyword}" "{city}" "{mod}" site:linktr.ee')
+            queries.append(f'"{kw}" "{mod}"')
 
-    for mod in mod_list:
-        for keyword in kw_list:
-            queries.append(f'"{keyword}" "{mod}"')
-            queries.append(f'"{keyword}" "{mod}" site:instagram.com')
+    # Instagram: keyword alone (profile discovery)
+    for kw in kw_list:
+        queries.append(f'"{kw}" site:instagram.com')
+
+    # Instagram: keyword + modifier
+    for kw in kw_list:
+        for mod in mod_list[:5]:  # Top 5 modifiers only for IG
+            queries.append(f'"{kw}" "{mod}" site:instagram.com')
+
+    # Platform: keyword + platform domain (coach marketplace discovery)
+    for kw in kw_list:
+        for plat in plat_list:
+            queries.append(f'"{kw}" site:{plat}')
 
     return queries
 
 
 def search_query(query: str, max_results: int | None = None) -> List[Dict[str, str]]:
+    """Execute a single query with automatic retry across region/safesearch combos."""
     max_results = max_results or settings.max_search_results_per_query
     _log(f"searching: {query[:80]}")
     attempts = []
@@ -158,7 +163,6 @@ def discover_candidates(queries: Iterable[str], target: int = 200) -> List[Dict[
                 seen.add(url)
                 candidates.append(result)
 
-        # Early stopping: we have enough raw candidates
         if len(candidates) >= target:
             _log(f"reached target of {target} candidates, stopping discovery early")
             break

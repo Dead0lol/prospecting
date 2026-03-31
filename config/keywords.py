@@ -1,59 +1,122 @@
-DISCOVERY_KEYWORDS = [
+"""
+Discovery keywords for fitness coach prospecting.
+
+Organized into tiers by ICP priority for a cold email campaign selling a low-ticket
+digital product. Geography is NOT used — any English-speaking fitness coach globally is a
+potential lead. Keywords that identify coaches already selling digitally are highest priority.
+"""
+
+# Tier 1: Coaches already selling digital products (highest conversion intent)
+# These coaches understand digital products and low-ticket offers.
+DIGITAL_SELLER_KEYWORDS = [
+    "fitness ebook author",
+    "training guide download",
+    "fitness workbook",
+    "coaching template",
+    "fitness challenge free",
+    "nutrition guide download",
+    "fitness swipe file",
+    "workout program pdf",
+    "meal plan template",
+    "fitness tracker printable",
+    "macro calculator coach",
+]
+
+# Tier 2: Coaches who coach online (understands digital delivery)
+ONLINE_COACH_KEYWORDS = [
     "online fitness coach",
     "online personal trainer",
+    "remote personal trainer",
+    "virtual fitness coach",
+    "online nutrition coach",
+    "1:1 online coaching",
+    "online coaching program",
+    "remote coaching fitness",
+    "virtual personal training",
+]
+
+# Tier 3: Transformation and results-based coaches (motivated buyers)
+TRANSFORMATION_KEYWORDS = [
     "fat loss coach",
     "body transformation coach",
-    "strength coach online",
-    "women's fitness coach",
-    "men's fitness coach",
-    "macro coach",
-    "nutrition and fitness coach",
-    "remote personal trainer",
-    "busy moms fitness coach",
-    "postpartum fitness coach",
+    "weight loss coach",
     "body recomposition coach",
     "muscle gain coach",
-    "womens online coach",
-    "weight loss coach",
-    "glute coach",
-    "wedding fitness coach",
-    "hybrid training coach",
-    "functional fitness coach",
-    "mobility coach",
-    "strength and conditioning coach",
-    "accountability coach fitness",
-    "lifestyle coach fitness",
-    "hormone health fitness coach",
-    "online nutrition coach",
-    "meal plan coach",
+    "strength coach online",
+    "body reset coach",
+    "fitness transformation coach",
+]
+
+# Tier 4: Niche audience coaches (higher ticket, more desperate for content)
+NICHE_COACH_KEYWORDS = [
+    "macro coach",
+    "macro nutrition coach",
+    "women's fitness coach",
+    "postpartum fitness coach",
+    "pcos fitness coach",
     "fitness coach for women over 40",
     "fitness coach for men over 40",
-    "pcos fitness coach",
+    "busy mom fitness coach",
+    "wedding fitness coach",
+    "mobility coach",
+    "functional fitness coach",
     "running coach online",
-    "home workout coach",
-    "calisthenics coach online",
+    "calisthenics coach",
+    "glute coach",
     "sports performance coach",
-    "wellness coach fitness",
 ]
 
+# Tier 5: Business-minded coaches (buyers of business resources)
+BUSINESS_COACH_KEYWORDS = [
+    "fitness coach business coach",
+    "personal trainer marketing",
+    "fitness coach mindset",
+    "online trainer tools",
+    "fitness business coach",
+    "trainer growth coach",
+]
+
+# Combine all keywords — tier order matters for query rotation
+DISCOVERY_KEYWORDS = (
+    DIGITAL_SELLER_KEYWORDS
+    + ONLINE_COACH_KEYWORDS
+    + TRANSFORMATION_KEYWORDS
+    + NICHE_COACH_KEYWORDS
+    + BUSINESS_COACH_KEYWORDS
+)
+
+# Intent modifiers — adds urgency and action signals to base keywords
 DISCOVERY_MODIFIERS = [
-    "instagram",
-    "link in bio",
-    "online coaching",
-    "1:1 coaching",
     "apply now",
-    "virtual coaching",
-    "remote coaching",
-    "work with me",
     "book a call",
+    "work with me",
+    "1:1 coaching",
+    "online coaching",
     "client results",
+    "free consultation",
+    "start today",
+    "coaching program",
+    "join now",
 ]
 
-DIRECTORY_HINTS = [
-    "coach",
-    "coaching",
-    "fitness",
-    "trainer",
-    "nutrition",
-    "transform",
-]
+# Platforms where coaches sell digital products — these are ACCEPTED sources,
+# not blocked. A coach on Kajabi/Gumroad is a perfect ICP match.
+COACH_PLATFORM_DOMAINS = {
+    "kajabi.com",          # Coaches selling courses/memberships
+    "gumroad.com",         # Coaches selling digital products
+    "thinkific.com",       # Coaches with online courses
+    "teachable.com",       # Coaches with online courses
+    "trainerize.com",      # Online coaching platform
+    "everfit.io",          # Online coaching platform
+    "caliber.com",         # Coaching platform
+    "koji.io",             # Link-in-bio with product selling
+    "linkpop.com",         # Link-in-bio (Shopify)
+}
+
+# Coach directory domains — structured profiles with contact info
+COACH_DIRECTORY_DOMAINS = {
+    "getmisfit.com",
+    "coachcaller.com",
+    "yogaia.com",
+    "fitnessnetwork.com",
+}

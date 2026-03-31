@@ -36,9 +36,8 @@ class Settings:
         os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", ROOT / "service_account.json.json")
     )
     target_country: str = os.getenv("TARGET_COUNTRY", "US")
-    target_cities: List[str] = field(
-        default_factory=lambda: _split_csv(os.getenv("TARGET_CITIES"), [])
-    )
+    # Deprecated — geography is no longer used for discovery. Kept for backwards compat.
+    target_cities: List[str] = field(default_factory=list)
     discovery_delay_seconds: float = float(os.getenv("DISCOVERY_DELAY_SECONDS", "3"))
     instagram_delay_seconds: float = float(os.getenv("INSTAGRAM_DELAY_SECONDS", "4"))
     website_delay_seconds: float = float(os.getenv("WEBSITE_DELAY_SECONDS", "2"))

@@ -10,8 +10,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Set
 from urllib.parse import urlparse
 
-from config.cities import US_TARGET_CITIES
-from config.keywords import DISCOVERY_KEYWORDS, DISCOVERY_MODIFIERS
+from config.keywords import DISCOVERY_KEYWORDS, DISCOVERY_MODIFIERS, COACH_PLATFORM_DOMAINS
+from discovery.web_search import (
+    ACCEPTED_SOURCE_DOMAINS,
+    DOMAIN_BLOCKLIST,
+    LINK_HUB_DOMAINS,
+)
 from config.settings import settings
 from discovery.duckduckgo_search import build_queries, discover_candidates, search_query
 from discovery.web_search import split_candidate_urls, DOMAIN_BLOCKLIST
@@ -208,9 +212,15 @@ def remember_lead_identities(lead: Lead, seen: Dict[str, Set[str]]) -> None:
 # ---------------------------------------------------------------------------
 
 def run_discovery(country: str, limit: int) -> Dict[str, List[Dict[str, str]]]:
-    """Run search queries and return categorised candidate URLs."""
-    cities = settings.target_cities or US_TARGET_CITIES
-    queries = build_queries(DISCOVERY_KEYWORDS, cities, DISCOVERY_MODIFIERS)
+    """Run keyword-based search queries and return categorised candidate URLs.
+    
+    Geography is irrelevant — the ICP is any English-speaking fitness coach globally.
+    """
+    queries = build_queries(
+        DISCOVERY_KEYWORDS,
+        DISCOVERY_MODIFIERS,
+        platforms=ACCEPTED_SOURCE_DOMAINS,
+    )
     queries = _rotate_queries(queries, settings.max_discovery_queries)
     log(f"Built {len(queries)} total queries, will run up to {settings.max_discovery_queries}")
     candidates = discover_candidates(queries, target=limit * 10)
@@ -228,8 +238,6 @@ JUNK_DOMAINS = {
     "blogili.com", "wikihow.com", "allrecipes.com", "buzzfeed.com",
     "goodreads.com", "imdb.com", "tripadvisor.com",
 }
-
-LINK_HUB_DOMAINS = {"linktr.ee", "beacons.ai", "stan.store"}
 
 
 def quick_reject_website(url: str, title: str) -> bool:
