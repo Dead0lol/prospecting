@@ -126,6 +126,25 @@ python pipeline.py --limit 10 --json
 python pipeline.py --limit 50 > .cache/runs/my_run.log 2>&1
 ```
 
+### 6. Run the UI (optional)
+
+The pipeline has a Streamlit web UI with a dashboard, searchable lead tables, and run controls.
+
+```bash
+streamlit run app.py
+```
+
+This opens a browser at `http://localhost:8501` with:
+
+| Page | What it does |
+|---|---|
+| **📊 Dashboard** | Lead count metrics, run history, latest leads |
+| **📋 Leads** | Searchable/filterable lead table with CSV download |
+| **▶️ Run** | Set lead count and run the pipeline with live log output |
+| **⚙️ Settings** | View all config values, keyword counts, cache stats, clear cache |
+
+The UI reads and writes to the same Google Sheets and checkpoint files as the CLI pipeline.
+
 ---
 
 ## Configuration

@@ -1,8 +1,2 @@
-beautifulsoup4
-ddgs
-dnspython
-gspread
-google-generativeai
-instaloader
-python-dotenv
-requests
+streamlit
+pandas
