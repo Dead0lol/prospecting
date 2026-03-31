@@ -73,12 +73,30 @@ def build_queries(keywords: Iterable[str], cities: Iterable[str], modifiers: Ite
     for keyword, city in combos:
         queries.append(f'"{keyword}" "{city}" site:instagram.com')
         queries.append(f'"{keyword}" "{city}"')
+        queries.append(f'"{keyword}" "{city}" site:linktr.ee')
+        queries.append(f'"{keyword}" "{city}" site:beacons.ai')
+        queries.append(f'"{keyword}" "{city}" site:stan.store')
+
+    # Add keyword-only queries so we also discover remote coaches that do not
+    # rank for city-specific searches.
+    for keyword in kw_list:
+        queries.append(f'"{keyword}" site:instagram.com')
+        queries.append(f'"{keyword}"')
+        queries.append(f'"{keyword}" site:linktr.ee')
+        queries.append(f'"{keyword}" site:beacons.ai')
+        queries.append(f'"{keyword}" site:stan.store')
 
     # Modifier queries at the end (lower priority, web-only)
-    for city in city_list[:3]:
+    for city in city_list:
         for mod in mod_list:
-            for keyword in kw_list[:4]:
+            for keyword in kw_list:
                 queries.append(f'"{keyword}" "{city}" "{mod}"')
+                queries.append(f'"{keyword}" "{city}" "{mod}" site:linktr.ee')
+
+    for mod in mod_list:
+        for keyword in kw_list:
+            queries.append(f'"{keyword}" "{mod}"')
+            queries.append(f'"{keyword}" "{mod}" site:instagram.com')
 
     return queries
 

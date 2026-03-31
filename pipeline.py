@@ -7,7 +7,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 from urllib.parse import urlparse
 
 from config.cities import US_TARGET_CITIES
@@ -38,6 +38,7 @@ def log(message: str) -> None:
 CHECKPOINT_DIR = settings.output_cache_dir / "runs"
 CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 CHECKPOINT_EVERY = 10
+DISCOVERY_STATE_PATH = settings.output_cache_dir / "discovery_state.json"
 
 
 def checkpoint_path(run_id: str) -> Path:
@@ -55,6 +56,153 @@ def save_checkpoint(leads: List[Lead], run_id: str, country: str) -> None:
     checkpoint_path(run_id).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _canonical_domain(url: str) -> str:
+    if not url:
+        return ""
+    return urlparse(url).netloc.lower().lstrip("www.")
+
+
+def _canonical_instagram_username(url_or_username: str) -> str:
+    value = (url_or_username or "").strip().lower()
+    if not value:
+        return ""
+    if "instagram.com" not in value:
+        return value.lstrip("@")
+    parsed = urlparse(value)
+    path = parsed.path.strip("/")
+    if not path:
+        return ""
+    return path.split("/", 1)[0].lstrip("@")
+
+
+def _load_discovery_offset(total_queries: int) -> int:
+    if total_queries <= 0:
+        return 0
+    try:
+        data = json.loads(DISCOVERY_STATE_PATH.read_text(encoding="utf-8"))
+        return int(data.get("next_offset", 0)) % total_queries
+    except Exception:
+        return 0
+
+
+def _save_discovery_offset(offset: int, total_queries: int) -> None:
+    if total_queries <= 0:
+        return
+    payload = {
+        "next_offset": offset % total_queries,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    DISCOVERY_STATE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _rotate_queries(queries: List[str], window: int) -> List[str]:
+    if not queries:
+        return []
+    offset = _load_discovery_offset(len(queries))
+    rotated = queries[offset:] + queries[:offset]
+    next_offset = offset + max(1, min(window, len(queries)))
+    _save_discovery_offset(next_offset, len(queries))
+    log(f"Discovery query offset: {offset}/{len(queries)}")
+    return rotated
+
+
+def load_seen_identities() -> Dict[str, Set[str]]:
+    seen = {"emails": set(), "instagrams": set(), "domains": set()}
+    try:
+        writer = SheetsWriter()
+        writer.ensure_tabs()
+        writer.ensure_all_leads_header()
+        rows = writer.sheet.worksheet("All_Leads").get_all_records()
+    except Exception as exc:
+        log(f"Could not load seen identities from sheet: {exc}")
+        return seen
+
+    for row in rows:
+        email = str(row.get("email", "")).strip().lower()
+        if email:
+            seen["emails"].add(email)
+
+        ig_candidates = [
+            str(row.get("instagram_username", "")).strip(),
+            str(row.get("instagram_url", "")).strip(),
+        ]
+        for candidate in ig_candidates:
+            username = _canonical_instagram_username(candidate)
+            if username:
+                seen["instagrams"].add(username)
+
+        for url in [
+            str(row.get("website", "")).strip(),
+            str(row.get("source_url", "")).strip(),
+        ]:
+            domain = _canonical_domain(url)
+            if domain:
+                seen["domains"].add(domain)
+
+    log(
+        f"Loaded seen identities: {len(seen['emails'])} emails, "
+        f"{len(seen['instagrams'])} IGs, {len(seen['domains'])} domains"
+    )
+    return seen
+
+
+def filter_seen_candidates(split: Dict[str, List[Dict[str, str]]], seen: Dict[str, Set[str]]) -> Dict[str, List[Dict[str, str]]]:
+    fresh_instagram: List[Dict[str, str]] = []
+    fresh_websites: List[Dict[str, str]] = []
+
+    for candidate in split.get("instagram", []):
+        username = _canonical_instagram_username(candidate.get("url", ""))
+        if username and username in seen["instagrams"]:
+            continue
+        fresh_instagram.append(candidate)
+
+    for candidate in split.get("websites", []):
+        domain = _canonical_domain(candidate.get("url", ""))
+        if domain and domain in seen["domains"]:
+            continue
+        fresh_websites.append(candidate)
+
+    log(
+        f"Suppressed seen candidates: {len(split.get('instagram', [])) - len(fresh_instagram)} IG, "
+        f"{len(split.get('websites', [])) - len(fresh_websites)} websites"
+    )
+    return {"instagram": fresh_instagram, "websites": fresh_websites}
+
+
+def is_seen_lead(lead: Lead, seen: Dict[str, Set[str]]) -> bool:
+    email = lead.email.strip().lower() if lead.email else ""
+    if email and email in seen["emails"]:
+        return True
+
+    for candidate in [lead.instagram_username, lead.instagram_url]:
+        username = _canonical_instagram_username(candidate)
+        if username and username in seen["instagrams"]:
+            return True
+
+    for url in [lead.website, lead.source_url]:
+        domain = _canonical_domain(url)
+        if domain and domain in seen["domains"]:
+            return True
+
+    return False
+
+
+def remember_lead_identities(lead: Lead, seen: Dict[str, Set[str]]) -> None:
+    email = lead.email.strip().lower() if lead.email else ""
+    if email:
+        seen["emails"].add(email)
+
+    for candidate in [lead.instagram_username, lead.instagram_url]:
+        username = _canonical_instagram_username(candidate)
+        if username:
+            seen["instagrams"].add(username)
+
+    for url in [lead.website, lead.source_url]:
+        domain = _canonical_domain(url)
+        if domain:
+            seen["domains"].add(domain)
+
+
 # ---------------------------------------------------------------------------
 # Discovery
 # ---------------------------------------------------------------------------
@@ -62,7 +210,8 @@ def save_checkpoint(leads: List[Lead], run_id: str, country: str) -> None:
 def run_discovery(country: str, limit: int) -> Dict[str, List[Dict[str, str]]]:
     """Run search queries and return categorised candidate URLs."""
     cities = settings.target_cities or US_TARGET_CITIES
-    queries = build_queries(DISCOVERY_KEYWORDS, cities[:10], DISCOVERY_MODIFIERS)
+    queries = build_queries(DISCOVERY_KEYWORDS, cities, DISCOVERY_MODIFIERS)
+    queries = _rotate_queries(queries, settings.max_discovery_queries)
     log(f"Built {len(queries)} total queries, will run up to {settings.max_discovery_queries}")
     candidates = discover_candidates(queries, target=limit * 10)
     log(f"Discovery returned {len(candidates)} raw candidates")
@@ -79,6 +228,8 @@ JUNK_DOMAINS = {
     "blogili.com", "wikihow.com", "allrecipes.com", "buzzfeed.com",
     "goodreads.com", "imdb.com", "tripadvisor.com",
 }
+
+LINK_HUB_DOMAINS = {"linktr.ee", "beacons.ai", "stan.store"}
 
 
 def quick_reject_website(url: str, title: str) -> bool:
@@ -99,9 +250,12 @@ def rank_website_candidates(candidates: List[Dict[str, str]]) -> List[Dict[str, 
         s = 0
         blob = f"{c.get('title', '')} {c.get('body', '')}".lower()
         url = c.get("url", "").lower()
+        domain = urlparse(url).netloc.lower().lstrip("www.")
         # Personal domain (short path, not a subdirectory article)
         if urlparse(url).path.strip("/") == "":
             s += 10
+        if any(domain == hub or domain.endswith(f".{hub}") for hub in LINK_HUB_DOMAINS):
+            s += 8
         # Signals of a real coaching business
         for hint in ["coaching", "1:1", "apply", "book a call", "free consult", "work with me"]:
             if hint in blob:
@@ -117,6 +271,40 @@ def rank_website_candidates(candidates: List[Dict[str, str]]) -> List[Dict[str, 
         return s
 
     return sorted(candidates, key=score, reverse=True)
+
+
+def _is_link_hub(url: str) -> bool:
+    domain = urlparse(url).netloc.lower().lstrip("www.")
+    return any(domain == hub or domain.endswith(f".{hub}") for hub in LINK_HUB_DOMAINS)
+
+
+def _extract_targets_from_link_hub(url: str) -> Dict[str, str]:
+    targets = {"website": "", "instagram_url": ""}
+    try:
+        hub = parse_link_hub(url)
+    except Exception as exc:
+        log(f"  Link hub parse failed: {exc}")
+        return targets
+
+    for link in cast_list(hub.get("links", [])):
+        if not link.startswith("http"):
+            continue
+        domain = urlparse(link).netloc.lower().lstrip("www.")
+        if not domain:
+            continue
+        if "instagram.com" in domain and not targets["instagram_url"]:
+            targets["instagram_url"] = link
+            continue
+        if any(domain == b or domain.endswith(f".{b}") for b in DOMAIN_BLOCKLIST):
+            continue
+        if domain in _SAAS_DOMAINS or any(domain.endswith(f".{s}") for s in _SAAS_DOMAINS):
+            continue
+        if _is_link_hub(link):
+            continue
+        if not targets["website"]:
+            targets["website"] = link
+
+    return targets
 
 
 # ---------------------------------------------------------------------------
@@ -578,12 +766,21 @@ def process_website_candidate(candidate: Dict[str, str], country: str) -> Lead |
         return None
 
     log(f"WEB: {url[:70]}")
+    resolved_website = url
+    resolved_instagram = ""
+    if _is_link_hub(url):
+        targets = _extract_targets_from_link_hub(url)
+        resolved_website = targets.get("website", "") or url
+        resolved_instagram = targets.get("instagram_url", "")
+        log(f"  Resolved link hub -> website={bool(targets.get('website'))} instagram={bool(resolved_instagram)}")
+
     lead = Lead(
         business_name=title or urlparse(url).netloc,
         source_query=candidate.get("query", ""),
         source_type="website",
         source_url=url,
-        website=url,
+        website=resolved_website,
+        instagram_url=resolved_instagram,
         country=country,
     )
 
@@ -629,7 +826,8 @@ def _has_coach_signals(lead: Lead) -> bool:
 def run(country: str = "US", limit: int = 100) -> List[Lead]:
     log(f"=== Pipeline start: country={country} limit={limit} ===")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    split = run_discovery(country, limit)
+    seen = load_seen_identities()
+    split = filter_seen_candidates(run_discovery(country, limit), seen)
 
     leads: List[Lead] = []
     ig_candidates = split["instagram"]
@@ -648,7 +846,11 @@ def run(country: str = "US", limit: int = 100) -> List[Lead]:
                 tried += 1
                 lead = process_website_candidate(candidate, country)
                 if lead:
+                    if is_seen_lead(lead, seen):
+                        log("  Skipping seen website lead")
+                        continue
                     lead.run_id = run_id
+                    remember_lead_identities(lead, seen)
                     leads.append(lead)
                     if len(leads) % CHECKPOINT_EVERY == 0:
                         save_checkpoint(leads, run_id, country)
@@ -666,7 +868,11 @@ def run(country: str = "US", limit: int = 100) -> List[Lead]:
                 log(f"[{i}/{len(ig_candidates)}]")
                 lead = process_instagram_candidate(candidate, country)
                 if lead:
+                    if is_seen_lead(lead, seen):
+                        log("  Skipping seen Instagram lead")
+                        continue
                     lead.run_id = run_id
+                    remember_lead_identities(lead, seen)
                     leads.append(lead)
                     if len(leads) % CHECKPOINT_EVERY == 0:
                         save_checkpoint(leads, run_id, country)

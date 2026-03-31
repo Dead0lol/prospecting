@@ -11,6 +11,29 @@ DISCOVERY_KEYWORDS = [
     "remote personal trainer",
     "busy moms fitness coach",
     "postpartum fitness coach",
+    "body recomposition coach",
+    "muscle gain coach",
+    "womens online coach",
+    "weight loss coach",
+    "glute coach",
+    "wedding fitness coach",
+    "hybrid training coach",
+    "functional fitness coach",
+    "mobility coach",
+    "strength and conditioning coach",
+    "accountability coach fitness",
+    "lifestyle coach fitness",
+    "hormone health fitness coach",
+    "online nutrition coach",
+    "meal plan coach",
+    "fitness coach for women over 40",
+    "fitness coach for men over 40",
+    "pcos fitness coach",
+    "running coach online",
+    "home workout coach",
+    "calisthenics coach online",
+    "sports performance coach",
+    "wellness coach fitness",
 ]
 
 DISCOVERY_MODIFIERS = [
@@ -19,6 +42,11 @@ DISCOVERY_MODIFIERS = [
     "online coaching",
     "1:1 coaching",
     "apply now",
+    "virtual coaching",
+    "remote coaching",
+    "work with me",
+    "book a call",
+    "client results",
 ]
 
 DIRECTORY_HINTS = [

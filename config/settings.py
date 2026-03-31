@@ -48,7 +48,7 @@ class Settings:
     request_timeout_seconds: int = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "20"))
     max_search_results_per_query: int = int(os.getenv("MAX_SEARCH_RESULTS_PER_QUERY", "20"))
     ddgs_timeout_seconds: int = int(os.getenv("DDGS_TIMEOUT_SECONDS", "15"))
-    max_discovery_queries: int = int(os.getenv("MAX_DISCOVERY_QUERIES", "20"))
+    max_discovery_queries: int = int(os.getenv("MAX_DISCOVERY_QUERIES", "40"))
     max_pages_per_site: int = int(os.getenv("MAX_PAGES_PER_SITE", "5"))
     user_agent: str = os.getenv(
         "USER_AGENT",

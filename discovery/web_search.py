@@ -46,6 +46,8 @@ FITNESS_HINTS = {
     "online coaching", "1:1", "macro", "weight loss",
 }
 
+LINK_HUB_DOMAINS = {"linktr.ee", "beacons.ai", "stan.store"}
+
 
 def _is_blocked_domain(domain: str) -> bool:
     for blocked in DOMAIN_BLOCKLIST:
@@ -80,6 +82,9 @@ def split_candidate_urls(candidates: List[Dict[str, str]]) -> Dict[str, List[Dic
                 continue
             instagram.append(candidate)
         elif domain and not _is_blocked_domain(domain):
+            if any(domain == hub or domain.endswith(f".{hub}") for hub in LINK_HUB_DOMAINS):
+                websites.append(candidate)
+                continue
             if _looks_like_article(url, title):
                 continue
             blob = f"{title} {candidate.get('body', '')} {url}".lower()
