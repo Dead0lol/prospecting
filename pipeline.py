@@ -395,6 +395,21 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
     if not queries_to_try:
         return
 
+    def _try_accept_result(rurl: str) -> bool:
+        domain = urlparse(rurl).netloc.lower().lstrip("www.")
+        if not domain:
+            return False
+        if "instagram.com" in domain:
+            return False
+        if any(domain == b or domain.endswith(f".{b}") for b in DOMAIN_BLOCKLIST):
+            return False
+        if domain in _SAAS_DOMAINS or any(domain.endswith(f".{s}") for s in _SAAS_DOMAINS):
+            return False
+        if urlparse(rurl).path.count("/") > 2:
+            return False
+        lead.website = rurl
+        return True
+
     for query in queries_to_try:
         log(f"  Searching for website: {query[:60]}")
         try:
@@ -429,21 +444,50 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
                 try:
                     hub = parse_link_hub(rurl)
                     for link in cast_list(hub.get("links", [])):
-                        if link.startswith("http") and urlparse(link).netloc:
-                            link_domain = urlparse(link).netloc.lower().lstrip("www.")
-                            if ("instagram.com" not in link_domain
-                                    and link_domain not in _SAAS_DOMAINS
-                                    and not any(h in link_domain for h in ["linktr.ee", "beacons.ai", "stan.store"])):
-                                lead.website = link
-                                log(f"  Found website via link hub: {link[:60]}")
-                                return
+                        if link.startswith("http") and urlparse(link).netloc and _try_accept_result(link):
+                            log(f"  Found website via link hub: {link[:60]}")
+                            return
                 except Exception:
                     pass
                 continue
 
-            lead.website = rurl
-            log(f"  Found website: {rurl[:60]}")
-            return
+            if _try_accept_result(rurl):
+                log(f"  Found website: {rurl[:60]}")
+                return
+
+    # Last chance: search directly for common link hubs by username, then resolve them.
+    hub_queries: List[str] = []
+    if username:
+        hub_queries.extend([
+            f'site:linktr.ee {username}',
+            f'site:beacons.ai {username}',
+            f'site:stan.store {username}',
+        ])
+
+    for query in hub_queries:
+        log(f"  Searching link hubs: {query}")
+        try:
+            results = search_query(query, max_results=3)
+        except Exception:
+            continue
+
+        for r in results:
+            rurl = r.get("url", "")
+            domain = urlparse(rurl).netloc.lower().lstrip("www.")
+            if not any(h in domain for h in ["linktr.ee", "beacons.ai", "stan.store"]):
+                continue
+            if username and username.lower() not in rurl.lower() and not _result_mentions_coach(r, username, name):
+                continue
+            try:
+                hub = parse_link_hub(rurl)
+                for link in cast_list(hub.get("links", [])):
+                    if link.startswith("http") and urlparse(link).netloc and _try_accept_result(link):
+                        lead.website = link
+                        lead.notes.append(f"website_via_hub:{domain}")
+                        log(f"  Found website via direct hub search: {link[:60]}")
+                        return
+            except Exception:
+                continue
 
     log(f"  No relevant website found for {username}")
 
