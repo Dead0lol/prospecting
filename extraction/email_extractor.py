@@ -13,8 +13,17 @@ def extract_emails(text: str) -> List[str]:
 
 
 def pick_best_email(emails: Iterable[str], domain: str = "") -> str:
-    priority_prefixes = ["hello", "contact", "info", "coach", "admin"]
+    priority_prefixes = ["info", "hello", "contact", "admin", "coach", "support", "team"]
     filtered = [email for email in emails if email]
+
+    # Filter out obviously bad emails
+    bad_patterns = [
+        "example@", "test@", "noreply@", "no-reply@", "mailer-daemon@",
+        "wordpress@", "wp@", "admin@localhost", "root@",
+        "email@example", ".png@", ".jpg@", ".gif@", ".svg@",
+    ]
+    filtered = [e for e in filtered if not any(bad in e.lower() for bad in bad_patterns)]
+
     if not filtered:
         return ""
 

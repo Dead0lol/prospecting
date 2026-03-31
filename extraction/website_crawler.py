@@ -12,7 +12,7 @@ from config.settings import settings
 from extraction.email_extractor import extract_emails
 
 
-PATH_HINTS = ["", "/about", "/contact", "/services", "/coaching", "/work-with-me"]
+PATH_HINTS = ["", "/about", "/contact", "/services", "/coaching", "/work-with-me", "/pricing", "/programs", "/online-coaching", "/1-on-1", "/book"]
 SOCIAL_PATTERNS = {
     "linkedin.com": "linkedin_url",
     "youtube.com": "youtube_url",
@@ -109,7 +109,10 @@ def crawl_website(base_url: str) -> Dict[str, object]:
         soup = BeautifulSoup(html, "html.parser")
         text = " ".join(soup.stripped_strings)
         text_chunks.append(text)
+
+        # Extract emails from visible text AND from raw HTML (catches obfuscated/hidden emails)
         emails.extend(extract_emails(text))
+        emails.extend(extract_emails(html))
 
         if not title:
             title = soup.title.text.strip() if soup.title and soup.title.text else ""

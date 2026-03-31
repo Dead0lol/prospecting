@@ -19,6 +19,15 @@ _GENERIC_WORDS = {
     "new", "york", "city", "nyc", "los", "angeles", "chicago",
     "houston", "phoenix", "dallas", "austin", "san", "diego",
     "antonio", "philadelphia", "eat", "liberty",
+    # Common words that appear in business names but aren't names
+    "losing", "gaining", "getting", "getting", "training", "results",
+    "lifestyle", "performance", "focused", "driven", "elite", "pro",
+    "life", "mindset", "journey", "results", "achieving", "building",
+    "becoming", "living", "moving", "feeling", "looking", "strong",
+    "better", "fitter", "leaner", "healthier", "happier",
+    "with", "your", "my", "our", "free", "start", "join",
+    "apply", "book", "schedule", "today", "now", "get", "take",
+    "the", "method", "system", "program", "plan", "academy", "studio",
 }
 
 
@@ -42,18 +51,19 @@ def guess_emails(contact_name: str, domain: str) -> List[str]:
 
     first, last = _extract_real_name(contact_name) if contact_name else ("", "")
 
-    # Build guess list: name-based first, then generic
+    # Build guess list: generic first (most reliable), then name-based
     guesses: List[str] = []
-    if first:
-        guesses.append(f"{first}@{domain}")
-        if last and last != first:
-            guesses.append(f"{first}.{last}@{domain}")
-            guesses.append(f"{first}{last}@{domain}")
 
     # Always include generic patterns — these are the most common for solo coaches
     guesses.append(f"hello@{domain}")
     guesses.append(f"info@{domain}")
     guesses.append(f"contact@{domain}")
+
+    if first and len(first) >= 2 and first.isalpha():
+        guesses.append(f"{first}@{domain}")
+        if last and last != first and len(last) >= 2 and last.isalpha():
+            guesses.append(f"{first}.{last}@{domain}")
+            guesses.append(f"{first}{last}@{domain}")
 
     # Dedupe while preserving order
     seen: set[str] = set()
