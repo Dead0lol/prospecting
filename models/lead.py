@@ -55,6 +55,7 @@ class Lead:
     verified_at: str = ""
     ai_icp_match: str = "uncertain"
     ai_maturity: str = "unknown"
+    run_id: str = ""
     raw_payload: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -109,4 +110,5 @@ SHEET_COLUMNS = [
     "verified_at",
     "ai_icp_match",
     "ai_maturity",
+    "run_id",
 ]

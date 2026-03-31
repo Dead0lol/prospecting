@@ -44,8 +44,13 @@ class SheetsWriter:
 
     def ensure_all_leads_header(self) -> None:
         ws = self.sheet.worksheet("All_Leads")
-        if not ws.get_all_values():
+        values = ws.get_all_values()
+        if not values:
             ws.append_row(SHEET_COLUMNS)
+            return
+        if values[0] != SHEET_COLUMNS:
+            ws.delete_rows(1)
+            ws.insert_row(SHEET_COLUMNS, 1)
 
     def write_leads(self, tab_name: str, leads: Iterable[Lead]) -> None:
         rows: List[List[str]] = []

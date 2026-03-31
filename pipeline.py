@@ -25,7 +25,7 @@ from resolution.instagram_profile import normalize_username
 from resolution.link_resolver import resolve_external_url
 from scoring.lead_scorer import score_lead
 from verification.deduplicator import deduplicate_leads
-from verification.smtp_verifier import verify_email_address
+from verification.smtp_verifier import verify_email_address, verify_emails_batch
 
 
 def log(message: str) -> None:
@@ -176,6 +176,24 @@ def verify_lead_email(lead: Lead) -> None:
     lead.email_status = verify_email_address(lead.email)
     lead.verified_at = datetime.now(timezone.utc).isoformat()
     log(f"  Status: {lead.email_status}")
+
+
+def verify_leads_in_batch(leads: List[Lead]) -> None:
+    """Verify all lead emails in parallel after candidate collection."""
+    email_map = {lead.email: lead for lead in leads if lead.email}
+    missing = [lead for lead in leads if not lead.email]
+
+    for lead in missing:
+        lead.email_status = "missing"
+
+    if not email_map:
+        return
+
+    statuses = verify_emails_batch(list(email_map.keys()))
+    verified_at = datetime.now(timezone.utc).isoformat()
+    for email, lead in email_map.items():
+        lead.email_status = statuses.get(email, "unknown")
+        lead.verified_at = verified_at
 
 
 def classify_and_score(lead: Lead) -> None:
@@ -471,10 +489,14 @@ def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead
     # Try to find their website via a follow-up search
     _find_website_for_ig_lead(lead)
 
+    # DROP IG-only leads that have no website — they score 16-24 (useless)
+    # and waste expensive SMTP time. Only process if we found a real site.
+    if not lead.website:
+        log(f"  Dropping IG-only lead (no website found): {username}")
+        return None
+
     enrich_lead_from_website(lead)
     find_email_for_lead(lead)
-    verify_lead_email(lead)
-    classify_and_score(lead)
     return lead
 
 
@@ -511,8 +533,6 @@ def process_website_candidate(candidate: Dict[str, str], country: str) -> Lead |
     enrich_lead_from_instagram(lead)
 
     find_email_for_lead(lead)
-    verify_lead_email(lead)
-    classify_and_score(lead)
     return lead
 
 
@@ -543,6 +563,7 @@ def _has_coach_signals(lead: Lead) -> bool:
 
 def run(country: str = "US", limit: int = 100) -> List[Lead]:
     log(f"=== Pipeline start: country={country} limit={limit} ===")
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     split = run_discovery(country, limit)
 
     leads: List[Lead] = []
@@ -560,6 +581,7 @@ def run(country: str = "US", limit: int = 100) -> List[Lead]:
             tried += 1
             lead = process_website_candidate(candidate, country)
             if lead:
+                lead.run_id = run_id
                 leads.append(lead)
                 if len(leads) >= limit:
                     break
@@ -574,11 +596,15 @@ def run(country: str = "US", limit: int = 100) -> List[Lead]:
             log(f"[{i}/{len(ig_candidates)}]")
             lead = process_instagram_candidate(candidate, country)
             if lead:
+                lead.run_id = run_id
                 leads.append(lead)
             if len(leads) >= limit:
                 break
 
     leads = deduplicate_leads(leads)
+    verify_leads_in_batch(leads)
+    for lead in leads:
+        classify_and_score(lead)
     log(f"=== Pipeline done: {len(leads)} leads after dedup ===")
     return leads
 

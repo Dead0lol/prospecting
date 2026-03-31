@@ -49,6 +49,27 @@ _NAME_NOISE = {
     "ny", "nyc", "la",
 }
 
+_COMMON_FIRST_NAMES = {
+    "alex", "alexis", "amanda", "amy", "andrew", "anna", "anthony", "ashley",
+    "ben", "brandon", "brian", "brittany",
+    "cameron", "carlos", "chris", "christina", "courtney",
+    "dan", "daniel", "david", "devin", "dylan",
+    "elizabeth", "emily", "emma", "eric", "ethan",
+    "hannah", "heather",
+    "jacob", "jake", "james", "jason", "jennifer", "jessica", "joe", "john", "jon", "jordan", "josh", "julia",
+    "kaitlyn", "karen", "kate", "katie", "kayla", "kevin", "kim", "kristen", "kyle",
+    "lauren", "lisa", "luke",
+    "maria", "mark", "matt", "matthew", "megan", "melissa", "michael", "mike", "molly",
+    "natalie", "nick", "nicole",
+    "olivia",
+    "patrick", "paul",
+    "rachel", "rebecca", "ryan",
+    "sam", "samantha", "sarah", "scott", "shannon", "steph", "stephanie", "steven",
+    "taylor", "thomas", "tiffany", "tyler",
+    "victoria",
+    "zach",
+}
+
 
 def _fetch(url: str) -> requests.Response:
     response = requests.get(url, headers={"User-Agent": settings.user_agent}, timeout=settings.request_timeout_seconds)
@@ -208,7 +229,7 @@ def _extract_contact_name(title: str, description: str) -> str:
 
 
 def _clean_name_candidate(text: str) -> str:
-    """Check if text contains a person's name and extract it."""
+    """Check if text contains a likely person's name and extract it."""
     # Remove common prefixes
     for prefix in ["coach ", "train with ", "meet ", "about ", "hi i'm ", "i'm ", "hey i'm "]:
         if text.lower().startswith(prefix):
@@ -217,7 +238,7 @@ def _clean_name_candidate(text: str) -> str:
     # Remove possessives
     text = re.sub(r"'s\b", "", text)
 
-    # Split into words, filter out noise
+    text = re.sub(r"[^A-Za-z'\-\s]", " ", text)
     words = text.split()
     name_words = []
     for w in words:
@@ -230,11 +251,20 @@ def _clean_name_candidate(text: str) -> str:
         if clean[0].isupper() and clean.replace("'", "").replace("-", "").isalpha():
             name_words.append(clean)
         else:
-            # Stop at first non-name word (e.g. "Samantha Jones Fitness Coaching" -> stop at "Fitness")
+            # Stop at first non-name word.
             break
 
-    if 1 <= len(name_words) <= 3:
-        return " ".join(name_words)
+    if not name_words or len(name_words) > 3:
+        return ""
+
+    first = name_words[0].lower()
+    if first not in _COMMON_FIRST_NAMES:
+        return ""
+
+    if len(name_words) == 1 and len(name_words[0]) < 4:
+        return ""
+
+    return " ".join(name_words)
     return ""
 
 

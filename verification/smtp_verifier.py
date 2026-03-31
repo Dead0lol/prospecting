@@ -6,8 +6,9 @@ import random
 import smtplib
 import string
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Tuple
 
 import dns.resolver
 
@@ -125,3 +126,57 @@ def verify_email_address(email: str) -> str:
 
     _set_cached(email, "unknown")
     return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Batch (parallel) verification
+# ---------------------------------------------------------------------------
+
+SMTP_MAX_WORKERS = 5
+
+
+def verify_emails_batch(emails: List[str], max_workers: int = SMTP_MAX_WORKERS) -> Dict[str, str]:
+    """Verify multiple emails in parallel using a thread pool.
+
+    Returns a dict mapping email -> status.
+    Thread-safe because each verification is independent (own SMTP connection,
+    own cache file, and _catch_all_domains dict is append-only).
+    """
+    results: Dict[str, str] = {}
+
+    if not emails:
+        return results
+
+    # Deduplicate while preserving order
+    unique_emails = list(dict.fromkeys(emails))
+
+    # Separate cached from uncached to avoid unnecessary thread overhead
+    uncached: List[str] = []
+    for email in unique_emails:
+        cached = _get_cached(email)
+        if cached is not None:
+            results[email] = cached
+            _log(f"cached: {email} -> {cached}")
+        else:
+            uncached.append(email)
+
+    if not uncached:
+        return results
+
+    _log(f"Verifying {len(uncached)} emails in parallel (workers={max_workers})")
+
+    def _verify_one(email: str) -> Tuple[str, str]:
+        return email, verify_email_address(email)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_verify_one, email): email for email in uncached}
+        for future in as_completed(futures):
+            try:
+                email, status = future.result()
+                results[email] = status
+            except Exception as exc:
+                email = futures[future]
+                results[email] = "unknown"
+                _log(f"verify error for {email}: {exc}")
+
+    return results
