@@ -1,0 +1,660 @@
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import time
+from collections import defaultdict
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+from urllib.parse import urlparse
+
+from config.cities import US_TARGET_CITIES
+from config.keywords import DISCOVERY_KEYWORDS, DISCOVERY_MODIFIERS
+from config.settings import settings
+from discovery.duckduckgo_search import build_queries, discover_candidates, search_query
+from discovery.web_search import split_candidate_urls, DOMAIN_BLOCKLIST
+from enrichment.gemini_classifier import classify_lead
+from export.sheets_writer import SheetsWriter
+from extraction.email_extractor import pick_best_email
+from extraction.email_guesser import guess_emails
+from extraction.linktree_parser import parse_link_hub
+from extraction.website_crawler import crawl_website
+from models.lead import Lead
+from resolution.instagram_profile import normalize_username
+from resolution.link_resolver import resolve_external_url
+from scoring.lead_scorer import score_lead
+from verification.deduplicator import deduplicate_leads
+from verification.smtp_verifier import verify_email_address
+
+
+def log(message: str) -> None:
+    stamp = datetime.now().strftime("%H:%M:%S")
+    safe = message.encode("ascii", errors="replace").decode("ascii")
+    print(f"[{stamp}] {safe}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Discovery
+# ---------------------------------------------------------------------------
+
+def run_discovery(country: str, limit: int) -> Dict[str, List[Dict[str, str]]]:
+    """Run search queries and return categorised candidate URLs."""
+    cities = settings.target_cities or US_TARGET_CITIES
+    queries = build_queries(DISCOVERY_KEYWORDS, cities[:10], DISCOVERY_MODIFIERS)
+    log(f"Built {len(queries)} total queries, will run up to {settings.max_discovery_queries}")
+    candidates = discover_candidates(queries, target=limit * 10)
+    log(f"Discovery returned {len(candidates)} raw candidates")
+    split = split_candidate_urls(candidates)
+    log(f"Filtered: {len(split['instagram'])} Instagram, {len(split['websites'])} websites")
+    return split
+
+
+# ---------------------------------------------------------------------------
+# Pre-filtering: cheap checks before expensive crawling
+# ---------------------------------------------------------------------------
+
+JUNK_DOMAINS = {
+    "blogili.com", "wikihow.com", "allrecipes.com", "buzzfeed.com",
+    "goodreads.com", "imdb.com", "tripadvisor.com",
+}
+
+
+def quick_reject_website(url: str, title: str) -> bool:
+    """Return True if this URL is obviously not a real coach site."""
+    domain = urlparse(url).netloc.lower().lstrip("www.")
+    if domain in JUNK_DOMAINS:
+        return True
+    # Very long paths are usually article pages
+    path = urlparse(url).path
+    if path.count("/") > 3:
+        return True
+    return False
+
+
+def rank_website_candidates(candidates: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Sort website candidates so the most promising ones come first."""
+    def score(c: Dict[str, str]) -> int:
+        s = 0
+        blob = f"{c.get('title', '')} {c.get('body', '')}".lower()
+        url = c.get("url", "").lower()
+        # Personal domain (short path, not a subdirectory article)
+        if urlparse(url).path.strip("/") == "":
+            s += 10
+        # Signals of a real coaching business
+        for hint in ["coaching", "1:1", "apply", "book a call", "free consult", "work with me"]:
+            if hint in blob:
+                s += 5
+        # Signals of a real person (not a directory/aggregator)
+        for hint in ["online coach", "personal trainer", "fitness coach"]:
+            if hint in blob:
+                s += 3
+        # Penalty for aggregator/directory patterns
+        for hint in ["top 10", "best ", "list of", "directory", "find a trainer"]:
+            if hint in blob:
+                s -= 10
+        return s
+
+    return sorted(candidates, key=score, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# Lead processing: shared logic for both IG and website candidates
+# ---------------------------------------------------------------------------
+
+def enrich_lead_from_website(lead: Lead) -> None:
+    """Crawl the lead's website and fill in data fields."""
+    if not lead.website:
+        return
+    try:
+        log(f"  Crawling {lead.website}")
+        crawl_data = crawl_website(lead.website)
+        lead.raw_payload.update(crawl_data)
+        lead.website_title = str(crawl_data.get("website_title", ""))
+        lead.website_description = str(crawl_data.get("website_description", ""))
+        lead.phone = str(crawl_data.get("phone", "")) or lead.phone
+        lead.booking_link = lead.booking_link or str(crawl_data.get("booking_link", ""))
+        lead.pricing_page = str(crawl_data.get("pricing_page", ""))
+        lead.has_pricing_page = bool(crawl_data.get("has_pricing_page", False))
+        lead.has_lead_magnet = bool(crawl_data.get("has_lead_magnet", False))
+        lead.has_testimonials = bool(crawl_data.get("has_testimonials", False))
+        lead.services_found = cast_list(crawl_data.get("services_found", []))
+        lead.platform = str(crawl_data.get("platform", "unknown"))
+        lead.offers_online_coaching = str(crawl_data.get("offers_online_coaching", "unknown"))
+        # Use the crawler's extracted contact name if we don't have one yet
+        crawled_name = str(crawl_data.get("contact_name", ""))
+        if crawled_name and not lead.contact_name:
+            lead.contact_name = crawled_name
+            log(f"  Extracted contact name: {crawled_name}")
+        socials = cast_dict(crawl_data.get("socials", {}))
+        lead.linkedin_url = lead.linkedin_url or str(socials.get("linkedin_url", ""))
+        lead.youtube_url = lead.youtube_url or str(socials.get("youtube_url", ""))
+        lead.tiktok_url = lead.tiktok_url or str(socials.get("tiktok_url", ""))
+        if not lead.instagram_url:
+            lead.instagram_url = str(socials.get("instagram_url", ""))
+        lead.social_links = [v for v in socials.values() if v]
+        emails = cast_list(crawl_data.get("emails", []))
+        if emails and not lead.email:
+            domain = urlparse(lead.website).netloc.replace("www.", "")
+            lead.email = pick_best_email(emails, domain)
+            lead.email_source = "website"
+            log(f"  Found email on site: {lead.email}")
+    except Exception as exc:
+        lead.notes.append(f"crawl_error:{exc}")
+        log(f"  Crawl failed: {exc}")
+
+
+def enrich_lead_from_instagram(lead: Lead) -> None:
+    """Stub — Instaloader is blocked by Instagram without valid login.
+    IG data is now parsed from DuckDuckGo snippets instead.
+    This function intentionally does nothing.
+    """
+    pass
+
+
+def find_email_for_lead(lead: Lead) -> None:
+    """Try to find an email through guessing if none was found on the site."""
+    if lead.email or not lead.website:
+        return
+    domain = urlparse(lead.website).netloc.replace("www.", "")
+    if not domain:
+        return
+    log(f"  Guessing email for {domain}")
+    guessed = guess_emails(lead.contact_name or lead.business_name, domain)
+    if guessed:
+        lead.email = guessed[0]
+        lead.email_source = "guessed"
+        log(f"  Guessed: {lead.email}")
+
+
+def verify_lead_email(lead: Lead) -> None:
+    """Verify the lead's email if present."""
+    if not lead.email:
+        lead.email_status = "missing"
+        return
+    log(f"  Verifying {lead.email}")
+    lead.email_status = verify_email_address(lead.email)
+    lead.verified_at = datetime.now(timezone.utc).isoformat()
+    log(f"  Status: {lead.email_status}")
+
+
+def classify_and_score(lead: Lead) -> None:
+    """Run heuristic/AI classification and scoring."""
+    try:
+        ai = classify_lead(lead)
+        lead.ai_icp_match = ai.get("is_solo_online_coach", "uncertain")
+        lead.specialty = ai.get("specialty", "unknown")
+        lead.country = ai.get("country", lead.country) or lead.country
+        lead.city = ai.get("city", lead.city) or lead.city
+        lead.offer_type = ai.get("offer_type", "unknown")
+        lead.ai_maturity = ai.get("maturity", "unknown")
+        lead.weakness = ai.get("weakness", "")
+        lead.outreach_angle = ai.get("outreach_angle", "")
+        lead.personalization_note = ai.get("personalization_note", "")
+    except Exception as exc:
+        lead.notes.append(f"classify_error:{exc}")
+    score_lead(lead)
+    log(f"  Score: {lead.lead_score} ({lead.lead_tier}) icp={lead.ai_icp_match}")
+
+
+# ---------------------------------------------------------------------------
+# Instagram snippet parsing (replaces Instaloader which is blocked)
+# ---------------------------------------------------------------------------
+
+_FOLLOWER_RE = re.compile(r"([\d,.]+)\s*[Kk]\s*[Ff]ollower|(\d[\d,.]*)\s*[Ff]ollower")
+
+# Words that indicate the "name" is actually a title/tagline, not a person's name
+_NOT_A_NAME = {
+    "online", "fitness", "coach", "trainer", "personal", "coaching",
+    "transformation", "nutrition", "strength", "fat loss", "macro",
+    "weight loss", "health", "wellness", "body", "gym", "training",
+    "certified", "nasm", "issa", "ace", "cscs", "content creator",
+}
+
+# SaaS/platform domains that are never a coach's personal website
+_SAAS_DOMAINS = {
+    "everfit.io", "trainerize.com", "trainerize.me", "my.playbookapp.io", "playbookapp.io",
+    "pixnoy.com", "newie.app", "share.newie.app", "storeplum.com", "msha.ke",
+    "garagegymreviews.com", "menshealth.com", "womenshealthmag.com",
+    "self.com", "shape.com", "bodybuilding.com", "muscleandstrength.com",
+    "t-nation.com", "aguea.net", "precisionnutrition.com",
+    "thumbtack.com", "bark.com", "trainiac.com", "future.co",
+    "caliber.com", "nasm.org", "acefitness.org",
+    # Payment / non-website links
+    "cash.app", "venmo.com", "paypal.com", "paypal.me", "gofundme.com",
+    "ko-fi.com", "buymeacoffee.com",
+    # Content/media sites
+    "biographytribune.com", "pouipouilabs.net", "coyotestudentnews.com",
+    "jessmcdougallcreative.com", "fitnesstrainer.nyc",
+    "buzzfeed.com", "buzzfeednews.com", "boredpanda.com",
+    # IG viewer / scraper sites
+    "imginn.com", "picuki.com", "instanavigation.com", "storiesig.net",
+    "inflact.com", "gramhir.com", "dumpor.com", "pixwox.com",
+    # Generic tech / template / freelance sites
+    "everydev.ai", "envato.com", "elements.envato.com", "themeforest.net",
+    "uk.coach.com", "coach.com",  # Coach the fashion brand
+    "easycoachkenya.com", "fiverr.com", "upwork.com",
+    # Influencer analytics / profile viewers
+    "yoloco.io", "hypeauditor.com", "socialblade.com", "ninjalitics.com",
+    # Directories / aggregators
+    "optimocoach.com", "find-a-trainer.com", "personaltrainerdirectory.com",
+    "wellnessliving.com", "mindbodyonline.com", "influencer-hero.com",
+    # Franchise / chain gyms
+    "anytimefitness.com", "snapfitness.com", "planetfitness.com",
+    "orangetheory.com", "24hourfitness.com", "equinox.com",
+    "goldsgym.com", "lafitness.com", "crunchfitness.com",
+}
+
+
+def _parse_followers(text: str) -> int:
+    """Extract follower count from snippet text like '10.8K followers' or '1,234 followers'."""
+    m = _FOLLOWER_RE.search(text)
+    if not m:
+        return 0
+    if m.group(1):  # "10.8K" form
+        try:
+            return int(float(m.group(1).replace(",", "")) * 1000)
+        except ValueError:
+            return 0
+    if m.group(2):  # "1,234" form
+        try:
+            return int(m.group(2).replace(",", ""))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _is_likely_name(text: str) -> bool:
+    """Check if text looks like a person's name vs a generic title/tagline."""
+    words = text.lower().split()
+    if not words or len(words) > 6:
+        return False
+    # If most words are generic fitness terms, it's not a name
+    generic_count = sum(1 for w in words if w.strip(",-.'") in _NOT_A_NAME)
+    return generic_count < len(words)  # at least one word is not generic
+
+
+def _parse_ig_snippet(candidate: Dict[str, str]) -> Dict[str, str | int]:
+    """Extract profile data from a DuckDuckGo search result for an IG profile.
+
+    Typical DuckDuckGo result for an IG profile:
+      title: "Pawan Lapborisuth | Online Fitness Coach"
+      body:  "535 posts 10.8K followers 1,732 following DM for Online Coaching
+              Inquiries Applied HCI Researcher New York, NY @italianyjoc"
+    """
+    url = candidate.get("url", "")
+    title = candidate.get("title", "")
+    body = candidate.get("body", "")
+    blob = f"{title} {body}"
+
+    # Username from URL
+    try:
+        username = normalize_username(url)
+    except ValueError:
+        username = ""
+
+    # Name: everything before the first "|" or "(" in the title
+    contact_name = ""
+    if title:
+        # Try splitting on common separators to get the name part
+        parts = []
+        for sep in ["|", "(", " - ", "•", "·"]:
+            if sep in title:
+                parts = [p.strip() for p in title.split(sep)]
+                break
+        if not parts:
+            parts = [title.strip()]
+
+        # Pick the first part that looks like a real name
+        for part in parts:
+            cleaned = re.sub(r"@\S+", "", part).strip()
+            if cleaned and cleaned.lower() not in {"instagram", ""} and _is_likely_name(cleaned):
+                contact_name = cleaned
+                break
+
+        # If no part looks like a name, fall back to username
+        if not contact_name:
+            contact_name = ""
+
+    # Followers
+    followers = _parse_followers(blob)
+
+    # Bio: the body IS the bio (may contain extra DuckDuckGo formatting)
+    bio_text = body.strip()
+
+    return {
+        "instagram_url": f"https://www.instagram.com/{username}/",
+        "instagram_username": username,
+        "contact_name": contact_name,
+        "bio_text": bio_text,
+        "followers": followers,
+        "business_name": contact_name or username,
+    }
+
+
+def _result_mentions_coach(result: Dict[str, str], username: str, contact_name: str) -> bool:
+    """Check if a search result title/body/URL mentions the coach's username or name.
+    This prevents matching random fitness sites that have nothing to do with the coach.
+    """
+    blob = f"{result.get('title', '')} {result.get('body', '')} {result.get('url', '')}".lower()
+    # Check username (most reliable)
+    if username and username.lower() in blob:
+        return True
+    # Check name parts (at least first AND last name must appear)
+    if contact_name and _is_likely_name(contact_name):
+        name_parts = [p.lower() for p in contact_name.split() if len(p) > 2]
+        if len(name_parts) >= 2 and all(part in blob for part in name_parts):
+            return True
+        # Single name: check if it appears in the domain
+        if len(name_parts) == 1:
+            domain = urlparse(result.get("url", "")).netloc.lower()
+            if name_parts[0] in domain:
+                return True
+    return False
+
+
+def _find_website_for_ig_lead(lead: Lead) -> None:
+    """Run a quick DuckDuckGo search to find the coach's website.
+
+    Strategy: search by IG username first (most unique identifier),
+    then fall back to contact name if username search fails.
+    Rejects SaaS platforms, aggregators, and blocklisted domains.
+    Validates that the result actually mentions the coach before accepting.
+    """
+    if lead.website:
+        return  # already have one
+
+    username = lead.instagram_username or ""
+    name = lead.contact_name or ""
+
+    # Build search queries — username first (unique), then name
+    queries_to_try: List[str] = []
+    if username:
+        queries_to_try.append(f'{username} fitness coach website')
+    if name and name != username and _is_likely_name(name):
+        queries_to_try.append(f'"{name}" fitness coach website')
+
+    if not queries_to_try:
+        return
+
+    for query in queries_to_try:
+        log(f"  Searching for website: {query[:60]}")
+        try:
+            results = search_query(query, max_results=5)
+        except Exception as exc:
+            log(f"  Website search failed: {exc}")
+            continue
+
+        for r in results:
+            rurl = r.get("url", "")
+            domain = urlparse(rurl).netloc.lower().lstrip("www.")
+            if not domain:
+                continue
+            # Skip Instagram, social media, blocklisted domains
+            if "instagram.com" in domain:
+                continue
+            if any(domain == b or domain.endswith(f".{b}") for b in DOMAIN_BLOCKLIST):
+                continue
+            # Skip SaaS/platform/aggregator domains
+            if domain in _SAAS_DOMAINS or any(domain.endswith(f".{s}") for s in _SAAS_DOMAINS):
+                continue
+            # Skip deep article paths (likely not the coach's homepage)
+            if urlparse(rurl).path.count("/") > 2:
+                continue
+
+            # RELEVANCE CHECK: does this result actually mention the coach?
+            if not _result_mentions_coach(r, username, name):
+                continue
+
+            # Handle link hubs — resolve to find the real site
+            if any(h in domain for h in ["linktr.ee", "beacons.ai", "stan.store"]):
+                try:
+                    hub = parse_link_hub(rurl)
+                    for link in cast_list(hub.get("links", [])):
+                        if link.startswith("http") and urlparse(link).netloc:
+                            link_domain = urlparse(link).netloc.lower().lstrip("www.")
+                            if ("instagram.com" not in link_domain
+                                    and link_domain not in _SAAS_DOMAINS
+                                    and not any(h in link_domain for h in ["linktr.ee", "beacons.ai", "stan.store"])):
+                                lead.website = link
+                                log(f"  Found website via link hub: {link[:60]}")
+                                return
+                except Exception:
+                    pass
+                continue
+
+            lead.website = rurl
+            log(f"  Found website: {rurl[:60]}")
+            return
+
+    log(f"  No relevant website found for {username}")
+
+
+# ---------------------------------------------------------------------------
+# Instagram candidate processing
+# ---------------------------------------------------------------------------
+
+def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead | None:
+    """Process a single Instagram candidate into a Lead.
+
+    Uses DuckDuckGo snippet data (name, followers, bio) instead of Instaloader,
+    which is blocked by Instagram without valid login credentials.
+    """
+    url = candidate["url"]
+    log(f"IG: {url}")
+
+    parsed = _parse_ig_snippet(candidate)
+    username = parsed["instagram_username"]
+    if not username:
+        log(f"  Could not parse username from URL, skipping")
+        return None
+
+    followers = cast_int(parsed.get("followers", 0))
+    contact_name = str(parsed.get("contact_name", ""))
+    bio_text = str(parsed.get("bio_text", ""))
+
+    log(f"  Parsed: {contact_name} | {followers} followers")
+
+    lead = Lead(
+        business_name=str(parsed.get("business_name", "")),
+        contact_name=contact_name,
+        instagram_url=str(parsed.get("instagram_url", "")),
+        instagram_username=str(username),
+        followers=followers,
+        bio_text=bio_text,
+        source_query=candidate.get("query", ""),
+        source_type="instagram",
+        source_url=url,
+        country=country,
+    )
+
+    # Try to find their website via a follow-up search
+    _find_website_for_ig_lead(lead)
+
+    enrich_lead_from_website(lead)
+    find_email_for_lead(lead)
+    verify_lead_email(lead)
+    classify_and_score(lead)
+    return lead
+
+
+# ---------------------------------------------------------------------------
+# Website candidate processing
+# ---------------------------------------------------------------------------
+
+def process_website_candidate(candidate: Dict[str, str], country: str) -> Lead | None:
+    """Process a website search result into a Lead (or None if junk)."""
+    url = candidate.get("url", "")
+    title = candidate.get("title", "")
+
+    if quick_reject_website(url, title):
+        return None
+
+    log(f"WEB: {url[:70]}")
+    lead = Lead(
+        business_name=title or urlparse(url).netloc,
+        source_query=candidate.get("query", ""),
+        source_type="website",
+        source_url=url,
+        website=url,
+        country=country,
+    )
+
+    enrich_lead_from_website(lead)
+
+    # Quick viability check BEFORE expensive email/SMTP work
+    if not _has_coach_signals(lead):
+        log(f"  Rejected: no coach signals")
+        return None
+
+    # If the website had an IG link, grab followers/bio/category for scoring
+    enrich_lead_from_instagram(lead)
+
+    find_email_for_lead(lead)
+    verify_lead_email(lead)
+    classify_and_score(lead)
+    return lead
+
+
+def _has_coach_signals(lead: Lead) -> bool:
+    """Cheap check: does this look like a real coach's site?"""
+    signals = 0
+    if lead.email:
+        signals += 1
+    if lead.booking_link:
+        signals += 1
+    if lead.offers_online_coaching == "yes":
+        signals += 1
+    if lead.has_pricing_page:
+        signals += 1
+    if lead.instagram_url:
+        signals += 1
+    blob = f"{lead.website_title} {lead.website_description} {' '.join(lead.services_found)}".lower()
+    for hint in ["coach", "trainer", "coaching", "1:1", "transformation"]:
+        if hint in blob:
+            signals += 1
+            break
+    return signals >= 2
+
+
+# ---------------------------------------------------------------------------
+# Main pipeline
+# ---------------------------------------------------------------------------
+
+def run(country: str = "US", limit: int = 100) -> List[Lead]:
+    log(f"=== Pipeline start: country={country} limit={limit} ===")
+    split = run_discovery(country, limit)
+
+    leads: List[Lead] = []
+    ig_candidates = split["instagram"]
+    web_candidates = rank_website_candidates(split["websites"])
+
+    # Process WEBSITE candidates first — they produce higher-quality leads
+    # because we already have their domain (no guessing needed)
+    if web_candidates:
+        log(f"--- Processing {len(web_candidates)} website candidates ---")
+        tried = 0
+        for candidate in web_candidates:
+            if tried >= limit * 3:  # Don't try forever
+                break
+            tried += 1
+            lead = process_website_candidate(candidate, country)
+            if lead:
+                leads.append(lead)
+                if len(leads) >= limit:
+                    break
+
+    # Fill remaining slots from Instagram candidates
+    remaining = limit - len(leads)
+    if remaining > 0 and ig_candidates:
+        log(f"--- Processing IG candidates (need {remaining} more) ---")
+        for i, candidate in enumerate(ig_candidates, 1):
+            if i > remaining * 2:  # Don't try too many
+                break
+            log(f"[{i}/{len(ig_candidates)}]")
+            lead = process_instagram_candidate(candidate, country)
+            if lead:
+                leads.append(lead)
+            if len(leads) >= limit:
+                break
+
+    leads = deduplicate_leads(leads)
+    log(f"=== Pipeline done: {len(leads)} leads after dedup ===")
+    return leads
+
+
+def export_run(leads: List[Lead], country: str) -> Dict[str, int]:
+    log("Exporting to Google Sheets")
+    writer = SheetsWriter()
+    writer.ensure_tabs()
+    writer.clear_priority_tabs()
+    writer.ensure_all_leads_header()
+
+    grouped: Dict[str, List[Lead]] = defaultdict(list)
+    for lead in leads:
+        grouped[lead.lead_tier].append(lead)
+
+    writer.write_leads("Hot_Leads", grouped.get("hot", []))
+    writer.write_leads("Good_Leads", grouped.get("good", []))
+    writer.write_leads("Review_Queue", grouped.get("review", []))
+    writer.write_leads("All_Leads", leads)
+
+    counts = {
+        "processed": len(leads),
+        "hot": len(grouped.get("hot", [])),
+        "good": len(grouped.get("good", [])),
+        "review": len(grouped.get("review", [])),
+    }
+    writer.log_run("success", country, counts["processed"], counts["hot"], counts["good"], counts["review"])
+    log(f"Export done: {counts}")
+    return counts
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def cast_list(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    return []
+
+
+def cast_dict(value: Any) -> Dict[str, str]:
+    if isinstance(value, dict):
+        return {str(k): str(v) for k, v in value.items() if v}
+    return {}
+
+
+def cast_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run the fitness coach lead pipeline")
+    parser.add_argument("--country", default="US")
+    parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args()
+
+    start = time.time()
+    leads = run(country=args.country, limit=args.limit)
+    counts = export_run(leads, args.country)
+    elapsed = time.time() - start
+
+    if args.json:
+        print(json.dumps({"counts": counts, "elapsed_seconds": round(elapsed, 1),
+                          "sample": [lead.to_dict() for lead in leads[:5]]}, indent=2))
+    else:
+        log(f"Done in {elapsed:.0f}s -> {counts}")
+
+
+if __name__ == "__main__":
+    main()
