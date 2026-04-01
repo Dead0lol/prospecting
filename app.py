@@ -47,6 +47,7 @@ def save_state(state: dict) -> None:
 # Google Sheets helpers
 # ---------------------------------------------------------------------------
 
+
 @st.cache_data(ttl=60)
 def load_sheet_data(sheet_name: str):
     try:
@@ -94,7 +95,9 @@ def _clean_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     for col in out.columns:
         out[col] = out[col].apply(
-            lambda v: "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
+            lambda v: ""
+            if v is None or (isinstance(v, float) and pd.isna(v))
+            else str(v)
         )
     return out
 
@@ -103,7 +106,9 @@ def load_checkpoints() -> list[dict]:
     checkpoints = []
     if not RUNS_DIR.exists():
         return checkpoints
-    for f in sorted(RUNS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+    for f in sorted(
+        RUNS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True
+    ):
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
             checkpoints.append(data)
@@ -115,6 +120,7 @@ def load_checkpoints() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Pipeline runner
 # ---------------------------------------------------------------------------
+
 
 class PipelineState:
     def __init__(self):
@@ -135,7 +141,8 @@ def run_pipeline(limit: int, sheet_name: str) -> None:
     cmd = [
         sys.executable,
         str(ROOT / "pipeline.py"),
-        "--limit", str(limit),
+        "--limit",
+        str(limit),
     ]
     proc = subprocess.Popen(
         cmd,
@@ -174,7 +181,10 @@ if "selected_sheet" not in st.session_state:
     state = load_state()
     try:
         from config.settings import settings
-        st.session_state["selected_sheet"] = state.get("sheet_name") or settings.google_sheet_name
+
+        st.session_state["selected_sheet"] = (
+            state.get("sheet_name") or settings.google_sheet_name
+        )
     except Exception:
         st.session_state["selected_sheet"] = "Fitness Coach Leads"
 
@@ -212,11 +222,21 @@ if page == "📊 Dashboard":
     with col_left:
         st.subheader("Recent Runs")
         if not run_history.empty:
-            display = run_history[["run_at", "status", "processed", "hot", "good", "review", "notes"]].head(20).copy()
-            display["run_at"] = pd.to_datetime(display["run_at"], errors="coerce").dt.strftime("%b %d %H:%M")
-            st.dataframe(display, width='stretch', hide_index=True)
+            display = (
+                run_history[
+                    ["run_at", "status", "processed", "hot", "good", "review", "notes"]
+                ]
+                .head(20)
+                .copy()
+            )
+            display["run_at"] = pd.to_datetime(
+                display["run_at"], errors="coerce"
+            ).dt.strftime("%b %d %H:%M")
+            st.dataframe(display, width="stretch", hide_index=True)
         else:
-            st.info("No runs recorded yet. Go to **Run** to start your first pipeline run.")
+            st.info(
+                "No runs recorded yet. Go to **Run** to start your first pipeline run."
+            )
 
     with col_right:
         st.subheader("Lead Breakdown")
@@ -237,15 +257,24 @@ if page == "📊 Dashboard":
     recent = pd.concat([hot, good]).head(20)
     if not recent.empty:
         show_cols = [
-            c for c in [
-                "business_name", "contact_name", "email", "website",
-                "instagram_url", "lead_score", "lead_tier",
-                "specialty", "offers_online_coaching", "email_status",
-            ] if c in recent.columns
+            c
+            for c in [
+                "business_name",
+                "contact_name",
+                "email",
+                "website",
+                "instagram_url",
+                "lead_score",
+                "lead_tier",
+                "specialty",
+                "offers_online_coaching",
+                "email_status",
+            ]
+            if c in recent.columns
         ]
         st.dataframe(
             recent[show_cols],
-            width='stretch',
+            width="stretch",
             hide_index=True,
         )
     else:
@@ -276,6 +305,7 @@ elif page == "📋 Leads":
     ]
 
     for tab_name, df, tab in tab_map:
+        with tab:
             if df.empty:
                 st.info(f"No leads in {tab_name}")
                 continue
@@ -283,32 +313,58 @@ elif page == "📋 Leads":
             col_search, col_tier, col_email, col_score_sort = st.columns([2, 1, 1, 1])
 
             with col_search:
-                search = st.text_input("🔍 Search", key=f"search_{tab_name[:2]}", placeholder="Name, email, website...")
+                search = st.text_input(
+                    "🔍 Search",
+                    key=f"search_{tab_name[:2]}",
+                    placeholder="Name, email, website...",
+                )
             with col_tier:
                 if "lead_tier" in df.columns:
-                    tier_filter = st.selectbox("Tier", ["All", "Hot", "Good", "Review"], key=f"tier_{tab_name[:2]}")
+                    tier_filter = st.selectbox(
+                        "Tier",
+                        ["All", "Hot", "Good", "Review"],
+                        key=f"tier_{tab_name[:2]}",
+                    )
                 else:
                     tier_filter = "All"
             with col_email:
-                email_filter = st.selectbox("Email", ["All", "Has Email", "No Email"], key=f"email_{tab_name[:2]}")
+                email_filter = st.selectbox(
+                    "Email",
+                    ["All", "Has Email", "No Email"],
+                    key=f"email_{tab_name[:2]}",
+                )
             with col_score_sort:
-                sort_by = st.selectbox("Sort by", ["Score ↓", "Score ↑", "Name A-Z", "Name Z-A"], key=f"sort_{tab_name[:2]}")
+                sort_by = st.selectbox(
+                    "Sort by",
+                    ["Score ↓", "Score ↑", "Name A-Z", "Name Z-A"],
+                    key=f"sort_{tab_name[:2]}",
+                )
 
             filtered = df.copy()
 
             if search:
-                mask = filtered.astype(str).apply(
-                    lambda col: col.str.contains(search, case=False, na=False)
-                ).any(axis=1)
+                mask = (
+                    filtered.astype(str)
+                    .apply(lambda col: col.str.contains(search, case=False, na=False))
+                    .any(axis=1)
+                )
                 filtered = filtered[mask]
 
             if tier_filter != "All" and "lead_tier" in filtered.columns:
-                filtered = filtered[filtered["lead_tier"].str.lower() == tier_filter.lower()]
+                filtered = filtered[
+                    filtered["lead_tier"].str.lower() == tier_filter.lower()
+                ]
 
             if email_filter == "Has Email" and "email" in filtered.columns:
-                filtered = filtered[filtered["email"].notna() & (filtered["email"].astype(str).str.strip() != "")]
+                filtered = filtered[
+                    filtered["email"].notna()
+                    & (filtered["email"].astype(str).str.strip() != "")
+                ]
             elif email_filter == "No Email" and "email" in filtered.columns:
-                filtered = filtered[filtered["email"].isna() | (filtered["email"].astype(str).str.strip() == "")]
+                filtered = filtered[
+                    filtered["email"].isna()
+                    | (filtered["email"].astype(str).str.strip() == "")
+                ]
 
             if sort_by == "Score ↓" and "lead_score" in filtered.columns:
                 filtered = filtered.sort_values("lead_score", ascending=False)
@@ -322,15 +378,22 @@ elif page == "📋 Leads":
             st.caption(f"**{len(filtered)}** leads shown (of **{len(df)}** total)")
 
             cols_to_show = [
-                "business_name", "contact_name", "email", "website",
-                "instagram_url", "lead_score", "lead_tier",
-                "specialty", "offers_online_coaching", "email_status",
+                "business_name",
+                "contact_name",
+                "email",
+                "website",
+                "instagram_url",
+                "lead_score",
+                "lead_tier",
+                "specialty",
+                "offers_online_coaching",
+                "email_status",
             ]
             display_cols = [c for c in cols_to_show if c in filtered.columns]
 
             st.dataframe(
                 filtered[display_cols],
-                width='stretch',
+                width="stretch",
                 hide_index=True,
             )
 
@@ -384,7 +447,9 @@ elif page == "▶️ Run":
         progress_placeholder = st.empty()
         log_placeholder = st.empty()
 
-        progress_placeholder.info("🔄 Pipeline running... This can take 15-30 minutes for 30 leads.")
+        progress_placeholder.info(
+            "🔄 Pipeline running... This can take 15-30 minutes for 30 leads."
+        )
 
         thread = threading.Thread(
             target=run_pipeline,
@@ -394,6 +459,7 @@ elif page == "▶️ Run":
         thread.start()
 
         import time
+
         while thread.is_alive() or not _pipeline_state.done:
             time.sleep(2)
             if _pipeline_state.lines:
@@ -418,12 +484,24 @@ elif page == "▶️ Run":
     checkpoints = load_checkpoints()
     if checkpoints:
         for cp in checkpoints[:5]:
-            with st.expander(f"Run {cp.get('run_id', 'unknown')} — {cp.get('saved_at', '')[:19]} — {cp.get('lead_count', 0)} leads"):
+            with st.expander(
+                f"Run {cp.get('run_id', 'unknown')} — {cp.get('saved_at', '')[:19]} — {cp.get('lead_count', 0)} leads"
+            ):
                 leads = cp.get("leads", [])
                 if leads:
                     df = pd.DataFrame(leads)
-                    cols = [c for c in ["business_name", "email", "website", "lead_score", "lead_tier"] if c in df.columns]
-                    st.dataframe(df[cols], width='stretch', hide_index=True)
+                    cols = [
+                        c
+                        for c in [
+                            "business_name",
+                            "email",
+                            "website",
+                            "lead_score",
+                            "lead_tier",
+                        ]
+                        if c in df.columns
+                    ]
+                    st.dataframe(df[cols], width="stretch", hide_index=True)
     else:
         st.info("No checkpoint files found in .cache/runs/")
 
@@ -437,6 +515,7 @@ elif page == "⚙️ Settings":
 
     try:
         from config.settings import settings
+
         st.markdown("#### Pipeline Settings")
         settings_data = {
             "Setting": [
@@ -484,6 +563,7 @@ elif page == "⚙️ Settings":
             DISCOVERY_MODIFIERS,
             COACH_PLATFORM_DOMAINS,
         )
+
         kws = {
             "Keyword Tier": [
                 "Digital Sellers 🔥",

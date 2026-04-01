@@ -1,2 +1,24 @@
+# Web Framework
 streamlit
+
+# Data Processing
 pandas
+
+# Web Scraping & HTTP
+requests
+beautifulsoup4
+
+# Search & Discovery
+ddgs
+
+# Email Verification
+dnspython
+
+# Google Sheets Integration
+gspread
+
+# Instagram Scraping
+instaloader
+
+# AI/ML (Optional - for Gemini classifier)
+google-generativeai
