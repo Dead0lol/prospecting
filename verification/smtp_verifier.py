@@ -5,7 +5,6 @@ import json
 import random
 import smtplib
 import string
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -13,6 +12,7 @@ from typing import Dict, List, Tuple
 import dns.resolver
 
 from config.settings import settings
+from logging_utils import get_logger
 
 # Simple disk cache so we never re-verify the same email or domain twice
 _CACHE_DIR = settings.output_cache_dir / "smtp"
@@ -20,18 +20,40 @@ _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Track which domains are catch-all so we skip guessing on them
 _catch_all_domains: Dict[str, bool] = {}
+_CATCH_ALL_CACHE_PATH = _CACHE_DIR / "catch_all_domains.json"
 
 SMTP_CONNECT_TIMEOUT = 5  # seconds per SMTP connection
 
 
-def _log(message: str) -> None:
-    stamp = time.strftime("%H:%M:%S")
-    print(f"[{stamp}] [smtp] {message}", flush=True)
+logger = get_logger("smtp")
 
 
 def _cache_path(email: str) -> Path:
-    h = hashlib.md5(email.lower().encode()).hexdigest()
+    h = hashlib.sha256(email.lower().encode()).hexdigest()
     return _CACHE_DIR / f"{h}.json"
+
+
+def _smtp_probe_identity() -> tuple[str, str]:
+    return settings.smtp_probe_helo_name, settings.smtp_probe_mail_from
+
+
+def _load_catch_all_cache() -> Dict[str, bool]:
+    if not _CATCH_ALL_CACHE_PATH.exists():
+        return {}
+    try:
+        data = json.loads(_CATCH_ALL_CACHE_PATH.read_text(encoding="utf-8"))
+        return {str(domain): bool(value) for domain, value in data.items()}
+    except Exception:
+        return {}
+
+
+def _persist_catch_all_cache() -> None:
+    try:
+        _CATCH_ALL_CACHE_PATH.write_text(
+            json.dumps(_catch_all_domains, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        pass
 
 
 def _get_cached(email: str) -> str | None:
@@ -61,9 +83,10 @@ def _mx_host(domain: str) -> str:
 def _smtp_check(email: str, mx: str) -> int | None:
     server = smtplib.SMTP(timeout=SMTP_CONNECT_TIMEOUT)
     try:
+        helo_name, mail_from = _smtp_probe_identity()
         server.connect(mx)
-        server.helo("verify.local")
-        server.mail("check@verify.local")
+        server.helo(helo_name)
+        server.mail(mail_from)
         code, _ = server.rcpt(email)
         return int(code)
     finally:
@@ -75,18 +98,23 @@ def _smtp_check(email: str, mx: str) -> int | None:
 
 def is_catch_all_domain(domain: str) -> bool:
     """Check if a domain accepts all addresses. Cached per-run."""
+    if not _catch_all_domains:
+        _catch_all_domains.update(_load_catch_all_cache())
     if domain in _catch_all_domains:
         return _catch_all_domains[domain]
 
     try:
         mx = _mx_host(domain)
-        random_local = "zz" + "".join(random.choice(string.ascii_lowercase) for _ in range(12))
+        random_local = "zz" + "".join(
+            random.choice(string.ascii_lowercase) for _ in range(12)
+        )
         code = _smtp_check(f"{random_local}@{domain}", mx)
         result = code == 250
     except Exception:
         result = False
 
     _catch_all_domains[domain] = result
+    _persist_catch_all_cache()
     return result
 
 
@@ -94,7 +122,7 @@ def verify_email_address(email: str) -> str:
     """Verify an email. Returns: valid, invalid, catch-all, unknown."""
     cached = _get_cached(email)
     if cached is not None:
-        _log(f"cached: {email} -> {cached}")
+        logger.info(f"cached: {email} -> {cached}")
         return cached
 
     domain = email.split("@", 1)[1]
@@ -135,7 +163,9 @@ def verify_email_address(email: str) -> str:
 SMTP_MAX_WORKERS = 5
 
 
-def verify_emails_batch(emails: List[str], max_workers: int = SMTP_MAX_WORKERS) -> Dict[str, str]:
+def verify_emails_batch(
+    emails: List[str], max_workers: int = SMTP_MAX_WORKERS
+) -> Dict[str, str]:
     """Verify multiple emails in parallel using a thread pool.
 
     Returns a dict mapping email -> status.
@@ -156,14 +186,14 @@ def verify_emails_batch(emails: List[str], max_workers: int = SMTP_MAX_WORKERS) 
         cached = _get_cached(email)
         if cached is not None:
             results[email] = cached
-            _log(f"cached: {email} -> {cached}")
+            logger.info(f"cached: {email} -> {cached}")
         else:
             uncached.append(email)
 
     if not uncached:
         return results
 
-    _log(f"Verifying {len(uncached)} emails in parallel (workers={max_workers})")
+    logger.info(f"Verifying {len(uncached)} emails in parallel (workers={max_workers})")
 
     def _verify_one(email: str) -> Tuple[str, str]:
         return email, verify_email_address(email)
@@ -177,6 +207,6 @@ def verify_emails_batch(emails: List[str], max_workers: int = SMTP_MAX_WORKERS) 
             except Exception as exc:
                 email = futures[future]
                 results[email] = "unknown"
-                _log(f"verify error for {email}: {exc}")
+                logger.info(f"verify error for {email}: {exc}")
 
     return results

@@ -8,6 +8,7 @@ from models.lead import Lead
 
 
 def deduplicate_leads(leads: Iterable[Lead]) -> List[Lead]:
+    """Merge leads that share a stable identity such as email, Instagram, or domain."""
     buckets: OrderedDict[str, Lead] = OrderedDict()
     key_to_primary: dict[str, str] = {}
 
@@ -17,7 +18,11 @@ def deduplicate_leads(leads: Iterable[Lead]) -> List[Lead]:
         primary_matches = list(dict.fromkeys(primary_matches))
 
         if not primary_matches:
-            primary_key = keys[0] if keys else f"name:{lead.business_name.lower()}:{lead.city.lower()}"
+            primary_key = (
+                keys[0]
+                if keys
+                else f"name:{lead.business_name.lower()}:{lead.city.lower()}"
+            )
             buckets[primary_key] = lead
             for key in keys:
                 key_to_primary[key] = primary_key
@@ -88,6 +93,7 @@ def _pick_better(a: Lead, b: Lead) -> Lead:
 
 
 def _merge_leads(a: Lead, b: Lead) -> Lead:
+    """Merge two lead records, preferring the more complete primary record."""
     primary = _pick_better(a, b)
     secondary = b if primary is a else a
 
@@ -117,8 +123,16 @@ def _merge_leads(a: Lead, b: Lead) -> Lead:
 
 
 def _completeness_score(lead: Lead) -> int:
+    """Estimate how much useful contact and qualification data a lead contains."""
     score = 0
-    for field in [lead.email, lead.website, lead.instagram_url, lead.contact_name, lead.specialty, lead.booking_link]:
+    for field in [
+        lead.email,
+        lead.website,
+        lead.instagram_url,
+        lead.contact_name,
+        lead.specialty,
+        lead.booking_link,
+    ]:
         if field:
             score += 1
     if _canonical_instagram_username(lead):

@@ -274,6 +274,7 @@ def _fetch(url: str) -> requests.Response:
 
 
 def crawl_website(base_url: str) -> Dict[str, object]:
+    """Fetch likely contact pages and extract lead signals from the site."""
     parsed = urlparse(base_url)
     if not parsed.scheme:
         base_url = f"https://{base_url}"
@@ -363,6 +364,9 @@ def crawl_website(base_url: str) -> Dict[str, object]:
 
         if not phone:
             phone = _extract_phone(text)
+
+        if emails and services and (booking_link or pricing_page):
+            break
 
     unique_emails = sorted(set(emails))
     full_text = "\n".join(text_chunks)
