@@ -49,9 +49,9 @@ The pipeline searches three types of sources:
 
 | Tier | Score | Meaning |
 |---|---|---|
-| Hot | ≥ 60 | Valid email + strong ICP signals — ready for outreach |
-| Good | ≥ 40 | Has email but some signals missing — still usable |
-| Review | < 40 | Weak signals or no email — review before using |
+| Hot | ≥ 65 | Valid email + strong ICP signals — ready for outreach |
+| Good | ≥ 45 | Has email but some signals missing — still usable |
+| Review | < 45 | Weak signals or no email — review before using |
 
 ### ICP: Who is a lead?
 
@@ -178,8 +178,8 @@ BUSINESS_COACH_KEYWORDS   # Business-minded coaches (may buy business resources)
 
 | Tab | What it contains |
 |---|---|
-| `Hot_Leads` | Leads scored ≥ 60. Cleared each run — latest run only. |
-| `Good_Leads` | Leads scored 45–59. Cleared each run — latest run only. |
+| `Hot_Leads` | Leads scored ≥ 65. Cleared each run — latest run only. |
+| `Good_Leads` | Leads scored 45–64. Cleared each run — latest run only. |
 | `Review_Queue` | Leads scored below 45. Review before using. |
 | `All_Leads` | Every lead from every run. Never cleared. Used for deduplication. |
 | `Run_Log` | Run history: date, status, lead counts, runtime. |
