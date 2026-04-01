@@ -1,4 +1,5 @@
 from models.lead import Lead
+from enrichment.gemini_classifier import heuristic_classify
 from scoring.lead_scorer import score_lead
 
 
@@ -39,3 +40,17 @@ def test_score_lead_keeps_weak_lead_in_review() -> None:
 
     assert lead.lead_score < 45
     assert lead.lead_tier == "review"
+
+
+def test_heuristic_classify_rejects_generic_business_site_as_non_fitness() -> None:
+    lead = Lead(
+        website_title="User Manual for Call Center Studio - Easy Guide",
+        website_description="Access the call center studio user manual for all screens.",
+        raw_payload={
+            "page_text": "Talk to an expert. Contact center software. AI avatar. Call recording."
+        },
+    )
+
+    result = heuristic_classify(lead)
+
+    assert result["is_solo_online_coach"] == "no"

@@ -540,9 +540,29 @@ def process_website_candidate(candidate: Dict[str, str], country: str) -> Lead |
 
 def _has_coach_signals(lead: Lead) -> bool:
     """Cheap check: does this look like a real coach's site?"""
+    blob = (
+        f"{lead.website_title} {lead.website_description} {' '.join(lead.services_found)} "
+        f"{lead.bio_text}"
+    ).lower()
+    fitness_keywords = [
+        "fitness",
+        "personal trainer",
+        "online coach",
+        "fitness coach",
+        "nutrition coach",
+        "strength coach",
+        "weight loss",
+        "fat loss",
+        "body recomposition",
+        "macro coaching",
+        "workout",
+        "gym",
+        "transformation",
+    ]
+    if not any(keyword in blob for keyword in fitness_keywords):
+        return False
+
     signals = 0
-    if lead.email:
-        signals += 1
     if lead.booking_link:
         signals += 1
     if lead.offers_online_coaching == "yes":
@@ -551,11 +571,10 @@ def _has_coach_signals(lead: Lead) -> bool:
         signals += 1
     if lead.instagram_url:
         signals += 1
-    blob = f"{lead.website_title} {lead.website_description} {' '.join(lead.services_found)}".lower()
-    for hint in ["coach", "trainer", "coaching", "1:1", "transformation"]:
-        if hint in blob:
-            signals += 1
-            break
+    if lead.email and urlparse(lead.email).scheme == "":
+        signals += 1
+    if len(lead.services_found) >= 1:
+        signals += 1
     return signals >= 2
 
 

@@ -54,7 +54,9 @@ def classify_lead(lead: Lead) -> Dict[str, str]:
             website_title=lead.website_title,
             website_description=lead.website_description,
             services_found=", ".join(lead.services_found),
-            website_excerpt=(lead.raw_payload.get("page_text", "")[:1800] if lead.raw_payload else ""),
+            website_excerpt=(
+                lead.raw_payload.get("page_text", "")[:1800] if lead.raw_payload else ""
+            ),
             followers=lead.followers,
             offers_online_coaching=lead.offers_online_coaching,
             has_booking_link=bool(lead.booking_link),
@@ -99,8 +101,30 @@ def heuristic_classify(lead: Lead) -> Dict[str, str]:
             specialty = value
             break
 
-    is_fit = any(hint in blob for hint in ["fitness", "trainer", "coach", "coaching", "fat loss", "strength"])
-    is_online = any(hint in blob for hint in ["online coaching", "remote coaching", "virtual coaching", "1:1 coaching"])
+    fitness_hints = [
+        "fitness",
+        "personal trainer",
+        "online trainer",
+        "fitness coach",
+        "nutrition coach",
+        "strength coach",
+        "fat loss",
+        "weight loss",
+        "body recomposition",
+        "macro coaching",
+        "workout",
+        "gym",
+    ]
+    is_fit = any(hint in blob for hint in fitness_hints)
+    is_online = any(
+        hint in blob
+        for hint in [
+            "online coaching",
+            "remote coaching",
+            "virtual coaching",
+            "1:1 coaching",
+        ]
+    )
     maturity = "early"
     if lead.has_testimonials and lead.has_pricing_page:
         maturity = "established"
@@ -119,7 +143,9 @@ def heuristic_classify(lead: Lead) -> Dict[str, str]:
     if is_fit and is_online:
         outreach_angle = "Pitch a stronger client acquisition funnel for their online coaching offer."
     elif is_fit:
-        outreach_angle = "Pitch clearer positioning and conversion paths for fitness offers."
+        outreach_angle = (
+            "Pitch clearer positioning and conversion paths for fitness offers."
+        )
 
     note = ""
     if lead.followers and not lead.booking_link:
@@ -128,7 +154,7 @@ def heuristic_classify(lead: Lead) -> Dict[str, str]:
         note = "Has sales intent but no top-of-funnel lead capture."
 
     return {
-        "is_solo_online_coach": "yes" if is_fit else "uncertain",
+        "is_solo_online_coach": "yes" if is_fit else "no",
         "specialty": specialty,
         "country": lead.country or "US",
         "city": lead.city or "",

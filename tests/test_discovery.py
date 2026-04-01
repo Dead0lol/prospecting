@@ -1,5 +1,7 @@
 from discovery.instagram_parser import parse_followers, parse_ig_snippet
 from discovery.web_search import quick_reject_website, split_candidate_urls
+from models.lead import Lead
+from pipeline import _has_coach_signals
 
 
 def test_parse_followers_handles_millions_and_thousands() -> None:
@@ -61,3 +63,15 @@ def test_quick_reject_website_rejects_junk_and_deep_paths() -> None:
     assert quick_reject_website("https://buzzfeed.com/article/coach-list") is True
     assert quick_reject_website("https://coach.example.com/blog/2024/10/post") is True
     assert quick_reject_website("https://coach.example.com/") is False
+
+
+def test_has_coach_signals_rejects_non_fitness_business_site() -> None:
+    lead = Lead(
+        email="info@callcenterstudio.com",
+        has_pricing_page=True,
+        instagram_url="https://www.instagram.com/ccs4cx",
+        website_title="User Manual for Call Center Studio - Easy Guide",
+        website_description="Access the call center studio user manual for all screens.",
+    )
+
+    assert _has_coach_signals(lead) is False
