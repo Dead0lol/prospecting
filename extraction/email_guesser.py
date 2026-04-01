@@ -1,33 +1,115 @@
 from __future__ import annotations
 
-import time
 from typing import List
 
+from logging_utils import get_logger
 
-def _log(message: str) -> None:
-    stamp = time.strftime("%H:%M:%S")
-    print(f"[{stamp}] [email_guesser] {message}", flush=True)
+
+logger = get_logger("email_guesser")
 
 
 # Words that are NOT real person names — they're titles, roles, or generic words
 _GENERIC_WORDS = {
-    "online", "fitness", "coach", "trainer", "personal", "coaching",
-    "transformation", "nutrition", "strength", "fat", "loss", "macro",
-    "weight", "health", "wellness", "body", "gym", "training",
-    "certified", "nasm", "issa", "ace", "cscs", "content", "creator",
-    "remote", "virtual", "home", "best", "top", "the", "and",
-    "new", "york", "city", "nyc", "los", "angeles", "chicago",
-    "houston", "phoenix", "dallas", "austin", "san", "diego",
-    "antonio", "philadelphia", "eat", "liberty",
+    "online",
+    "fitness",
+    "coach",
+    "trainer",
+    "personal",
+    "coaching",
+    "transformation",
+    "nutrition",
+    "strength",
+    "fat",
+    "loss",
+    "macro",
+    "weight",
+    "health",
+    "wellness",
+    "body",
+    "gym",
+    "training",
+    "certified",
+    "nasm",
+    "issa",
+    "ace",
+    "cscs",
+    "content",
+    "creator",
+    "remote",
+    "virtual",
+    "home",
+    "best",
+    "top",
+    "the",
+    "and",
+    "new",
+    "york",
+    "city",
+    "nyc",
+    "los",
+    "angeles",
+    "chicago",
+    "houston",
+    "phoenix",
+    "dallas",
+    "austin",
+    "san",
+    "diego",
+    "antonio",
+    "philadelphia",
+    "eat",
+    "liberty",
     # Common words that appear in business names but aren't names
-    "losing", "gaining", "getting", "getting", "training", "results",
-    "lifestyle", "performance", "focused", "driven", "elite", "pro",
-    "life", "mindset", "journey", "results", "achieving", "building",
-    "becoming", "living", "moving", "feeling", "looking", "strong",
-    "better", "fitter", "leaner", "healthier", "happier",
-    "with", "your", "my", "our", "free", "start", "join",
-    "apply", "book", "schedule", "today", "now", "get", "take",
-    "the", "method", "system", "program", "plan", "academy", "studio",
+    "losing",
+    "gaining",
+    "getting",
+    "getting",
+    "training",
+    "results",
+    "lifestyle",
+    "performance",
+    "focused",
+    "driven",
+    "elite",
+    "pro",
+    "life",
+    "mindset",
+    "journey",
+    "results",
+    "achieving",
+    "building",
+    "becoming",
+    "living",
+    "moving",
+    "feeling",
+    "looking",
+    "strong",
+    "better",
+    "fitter",
+    "leaner",
+    "healthier",
+    "happier",
+    "with",
+    "your",
+    "my",
+    "our",
+    "free",
+    "start",
+    "join",
+    "apply",
+    "book",
+    "schedule",
+    "today",
+    "now",
+    "get",
+    "take",
+    "the",
+    "method",
+    "system",
+    "program",
+    "plan",
+    "academy",
+    "studio",
 }
 
 
@@ -74,6 +156,6 @@ def guess_emails(contact_name: str, domain: str) -> List[str]:
             unique_guesses.append(g)
 
     for guess in unique_guesses[:3]:
-        _log(f"candidate {guess}")
+        logger.info(f"candidate {guess}")
 
     return unique_guesses[:3]

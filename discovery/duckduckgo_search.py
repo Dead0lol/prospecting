@@ -18,14 +18,15 @@ from typing import Dict, Iterable, List
 from ddgs import DDGS
 
 from config.settings import settings
+from logging_utils import get_logger
 
 
-def _log(message: str) -> None:
-    stamp = time.strftime("%H:%M:%S")
-    print(f"[{stamp}] [discovery] {message}", flush=True)
+logger = get_logger("discovery")
 
 
-def _search_ddgs_once(query: str, max_results: int, region: str, safesearch: str) -> List[Dict[str, str]]:
+def _search_ddgs_once(
+    query: str, max_results: int, region: str, safesearch: str
+) -> List[Dict[str, str]]:
     hits: List[Dict[str, str]] = []
     with DDGS(timeout=settings.ddgs_timeout_seconds) as ddgs:
         for result in ddgs.text(
@@ -108,13 +109,15 @@ def build_queries(
 def search_query(query: str, max_results: int | None = None) -> List[Dict[str, str]]:
     """Execute a single query with automatic retry across region/safesearch combos."""
     max_results = max_results or settings.max_search_results_per_query
-    _log(f"searching: {query[:80]}")
+    logger.info(f"searching: {query[:80]}")
     attempts = []
     for variant in _query_variants(query):
-        attempts.extend([
-            (variant, "us-en", "off"),
-            (variant, "wt-wt", "off"),
-        ])
+        attempts.extend(
+            [
+                (variant, "us-en", "off"),
+                (variant, "wt-wt", "off"),
+            ]
+        )
 
     hits: List[Dict[str, str]] = []
     seen_urls: set[str] = set()
@@ -122,7 +125,9 @@ def search_query(query: str, max_results: int | None = None) -> List[Dict[str, s
     for index, (variant, region, safesearch) in enumerate(attempts, start=1):
         try:
             if index > 1:
-                _log(f"retry {index - 1}: {variant[:80]} region={region} safesearch={safesearch}")
+                logger.info(
+                    f"retry {index - 1}: {variant[:80]} region={region} safesearch={safesearch}"
+                )
             batch = _search_ddgs_once(variant, max_results, region, safesearch)
             for hit in batch:
                 if hit["url"] in seen_urls:
@@ -134,27 +139,29 @@ def search_query(query: str, max_results: int | None = None) -> List[Dict[str, s
                 break
         except Exception as exc:
             last_error = str(exc)
-            _log(f"search error: {exc}")
+            logger.info(f"search error: {exc}")
 
     if not hits and last_error:
-        _log(f"all retries failed for query: {query[:80]}")
-    _log(f"got {len(hits)} hits")
+        logger.info(f"all retries failed for query: {query[:80]}")
+    logger.info(f"got {len(hits)} hits")
     time.sleep(settings.discovery_delay_seconds)
     return hits
 
 
-def discover_candidates(queries: Iterable[str], target: int = 200) -> List[Dict[str, str]]:
+def discover_candidates(
+    queries: Iterable[str], target: int = 200
+) -> List[Dict[str, str]]:
     """Run queries until we reach target candidate count or exhaust queries."""
     seen: set[str] = set()
     candidates: List[Dict[str, str]] = []
 
     query_list = list(queries)[: settings.max_discovery_queries]
-    _log(f"running up to {len(query_list)} queries (target {target} candidates)")
+    logger.info(f"running up to {len(query_list)} queries (target {target} candidates)")
 
     queries_run = 0
     for index, query in enumerate(query_list, start=1):
         queries_run = index
-        _log(f"query {index}/{len(query_list)} (pool={len(candidates)})")
+        logger.info(f"query {index}/{len(query_list)} (pool={len(candidates)})")
         results = search_query(query)
 
         for result in results:
@@ -164,8 +171,12 @@ def discover_candidates(queries: Iterable[str], target: int = 200) -> List[Dict[
                 candidates.append(result)
 
         if len(candidates) >= target:
-            _log(f"reached target of {target} candidates, stopping discovery early")
+            logger.info(
+                f"reached target of {target} candidates, stopping discovery early"
+            )
             break
 
-    _log(f"discovery done: {len(candidates)} unique candidates from {queries_run} queries")
+    logger.info(
+        f"discovery done: {len(candidates)} unique candidates from {queries_run} queries"
+    )
     return candidates

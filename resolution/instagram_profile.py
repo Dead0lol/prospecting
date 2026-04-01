@@ -3,9 +3,8 @@ from __future__ import annotations
 import re
 import time
 from functools import lru_cache
+from importlib import import_module
 from typing import Dict
-
-import instaloader
 
 from config.settings import settings
 
@@ -14,7 +13,8 @@ INSTAGRAM_RE = re.compile(r"instagram\.com/([A-Za-z0-9_.]+)")
 
 
 @lru_cache(maxsize=1)
-def get_loader() -> instaloader.Instaloader:
+def get_loader():
+    instaloader = import_module("instaloader")
     loader = instaloader.Instaloader(
         download_pictures=False,
         download_videos=False,
@@ -33,20 +33,32 @@ def normalize_username(instagram_url_or_username: str) -> str:
     if instagram_url_or_username.startswith("http"):
         match = INSTAGRAM_RE.search(instagram_url_or_username)
         if not match:
-            raise ValueError(f"Could not parse username from {instagram_url_or_username}")
+            raise ValueError(
+                f"Could not parse username from {instagram_url_or_username}"
+            )
         username = match.group(1).strip("/")
         # Filter out non-profile paths that slipped through
-        if username.lower() in {"p", "reel", "reels", "explore", "stories", "accounts", "tv", "s"}:
+        if username.lower() in {
+            "p",
+            "reel",
+            "reels",
+            "explore",
+            "stories",
+            "accounts",
+            "tv",
+            "s",
+        }:
             raise ValueError(f"Not a profile URL: {instagram_url_or_username}")
         return username
     return instagram_url_or_username.strip().lstrip("@").strip("/")
 
 
 def fetch_profile(instagram_url_or_username: str) -> Dict[str, object]:
+    instaloader = import_module("instaloader")
     username = normalize_username(instagram_url_or_username)
     loader = get_loader()
     profile = instaloader.Profile.from_username(loader.context, username)
-    time.sleep(settings.instagram_delay_seconds)
+    time.sleep(settings.discovery_delay_seconds)
     return {
         "instagram_url": f"https://www.instagram.com/{profile.username}/",
         "instagram_username": profile.username,

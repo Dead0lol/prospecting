@@ -5,6 +5,7 @@ from models.lead import Lead
 
 
 def score_lead(lead: Lead) -> Lead:
+    """Assign a heuristic score and tier based on contactability and ICP fit."""
     score = 0
 
     # --- Email quality ---
@@ -26,7 +27,15 @@ def score_lead(lead: Lead) -> Lead:
     # --- Location ---
     if lead.country.lower() in {"us", "usa", "united states"}:
         score += 10
-    elif lead.country.lower() in {"uk", "gb", "united kingdom", "canada", "ca", "australia", "au"}:
+    elif lead.country.lower() in {
+        "uk",
+        "gb",
+        "united kingdom",
+        "canada",
+        "ca",
+        "australia",
+        "au",
+    }:
         score += 8
 
     # --- ICP match ---

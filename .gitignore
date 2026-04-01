@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 service_account.json
 service_account.json.json
+nul

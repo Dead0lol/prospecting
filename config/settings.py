@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
@@ -22,6 +23,11 @@ def _get_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _default_smtp_probe_host() -> str:
+    host = socket.getfqdn().strip() or socket.gethostname().strip() or "localhost"
+    return host if "." in host else f"{host}.localdomain"
 
 
 @dataclass(slots=True)
@@ -54,6 +60,12 @@ class Settings:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         ),
+    )
+    smtp_probe_helo_name: str = os.getenv(
+        "SMTP_PROBE_HELO_NAME", _default_smtp_probe_host()
+    )
+    smtp_probe_mail_from: str = os.getenv(
+        "SMTP_PROBE_MAIL_FROM", f"postmaster@{_default_smtp_probe_host()}"
     )
     hot_lead_threshold: int = int(os.getenv("HOT_LEAD_THRESHOLD", "65"))
     good_lead_threshold: int = int(os.getenv("GOOD_LEAD_THRESHOLD", "45"))

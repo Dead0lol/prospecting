@@ -6,6 +6,8 @@ digital product. Geography is NOT used — any English-speaking fitness coach gl
 potential lead. Keywords that identify coaches already selling digitally are highest priority.
 """
 
+from config.blocklists import COACH_DIRECTORY_DOMAINS, COACH_PLATFORM_DOMAINS
+
 # Tier 1: Coaches already selling digital products (highest conversion intent)
 # These coaches understand digital products and low-ticket offers.
 DIGITAL_SELLER_KEYWORDS = [
@@ -98,25 +100,3 @@ DISCOVERY_MODIFIERS = [
     "coaching program",
     "join now",
 ]
-
-# Platforms where coaches sell digital products — these are ACCEPTED sources,
-# not blocked. A coach on Kajabi/Gumroad is a perfect ICP match.
-COACH_PLATFORM_DOMAINS = {
-    "kajabi.com",          # Coaches selling courses/memberships
-    "gumroad.com",         # Coaches selling digital products
-    "thinkific.com",       # Coaches with online courses
-    "teachable.com",       # Coaches with online courses
-    "trainerize.com",      # Online coaching platform
-    "everfit.io",          # Online coaching platform
-    "caliber.com",         # Coaching platform
-    "koji.io",             # Link-in-bio with product selling
-    "linkpop.com",         # Link-in-bio (Shopify)
-}
-
-# Coach directory domains — structured profiles with contact info
-COACH_DIRECTORY_DOMAINS = {
-    "getmisfit.com",
-    "coachcaller.com",
-    "yogaia.com",
-    "fitnessnetwork.com",
-}
