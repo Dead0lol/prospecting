@@ -39,13 +39,12 @@ class Settings:
     # Deprecated — geography is no longer used for discovery. Kept for backwards compat.
     target_cities: List[str] = field(default_factory=list)
     discovery_delay_seconds: float = float(os.getenv("DISCOVERY_DELAY_SECONDS", "3"))
-    instagram_delay_seconds: float = float(os.getenv("INSTAGRAM_DELAY_SECONDS", "4"))
     website_delay_seconds: float = float(os.getenv("WEBSITE_DELAY_SECONDS", "2"))
-    smtp_delay_seconds: float = float(os.getenv("SMTP_DELAY_SECONDS", "3"))
     gemini_delay_seconds: float = float(os.getenv("GEMINI_DELAY_SECONDS", "4"))
-    profile_batch_size: int = int(os.getenv("PROFILE_BATCH_SIZE", "50"))
     request_timeout_seconds: int = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "20"))
-    max_search_results_per_query: int = int(os.getenv("MAX_SEARCH_RESULTS_PER_QUERY", "20"))
+    max_search_results_per_query: int = int(
+        os.getenv("MAX_SEARCH_RESULTS_PER_QUERY", "20")
+    )
     ddgs_timeout_seconds: int = int(os.getenv("DDGS_TIMEOUT_SECONDS", "15"))
     max_discovery_queries: int = int(os.getenv("MAX_DISCOVERY_QUERIES", "40"))
     max_pages_per_site: int = int(os.getenv("MAX_PAGES_PER_SITE", "5"))
