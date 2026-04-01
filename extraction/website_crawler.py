@@ -12,7 +12,19 @@ from config.settings import settings
 from extraction.email_extractor import extract_emails
 
 
-PATH_HINTS = ["", "/about", "/contact", "/services", "/coaching", "/work-with-me", "/pricing", "/programs", "/online-coaching", "/1-on-1", "/book"]
+PATH_HINTS = [
+    "",
+    "/about",
+    "/contact",
+    "/services",
+    "/coaching",
+    "/work-with-me",
+    "/pricing",
+    "/programs",
+    "/online-coaching",
+    "/1-on-1",
+    "/book",
+]
 SOCIAL_PATTERNS = {
     "linkedin.com": "linkedin_url",
     "youtube.com": "youtube_url",
@@ -21,58 +33,241 @@ SOCIAL_PATTERNS = {
     "instagram.com": "instagram_url",
 }
 BOOKING_HINTS = ["calendly.com", "acuityscheduling.com", "tidycal.com"]
-LEAD_MAGNET_HINTS = ["free guide", "freebie", "ebook", "download", "challenge", "lead magnet"]
-SERVICE_HINTS = ["1:1 coaching", "online coaching", "nutrition coaching", "fat loss", "strength training", "macro coaching"]
+LEAD_MAGNET_HINTS = [
+    "free guide",
+    "freebie",
+    "ebook",
+    "download",
+    "challenge",
+    "lead magnet",
+]
+SERVICE_HINTS = [
+    "1:1 coaching",
+    "online coaching",
+    "nutrition coaching",
+    "fat loss",
+    "strength training",
+    "macro coaching",
+]
 
 # Generic words that are NOT part of a person's name
 _NAME_NOISE = {
-    "fitness", "coach", "coaching", "trainer", "personal", "online",
-    "training", "nutrition", "wellness", "health", "home", "about",
-    "contact", "services", "blog", "official", "site", "website",
-    "welcome", "the", "and", "of", "for", "my", "your", "our", "get",
-    "certified", "nasm", "issa", "ace", "train", "performance",
-    "strength", "studio", "gym", "body", "macro", "macros", "transform",
-    "transformation", "liberty", "phoenix", "rose", "iron", "elite",
-    "premier", "prime", "peak", "summit", "apex", "core", "pro",
+    "fitness",
+    "coach",
+    "coaching",
+    "trainer",
+    "personal",
+    "online",
+    "training",
+    "nutrition",
+    "wellness",
+    "health",
+    "home",
+    "about",
+    "contact",
+    "services",
+    "blog",
+    "official",
+    "site",
+    "website",
+    "welcome",
+    "the",
+    "and",
+    "of",
+    "for",
+    "my",
+    "your",
+    "our",
+    "get",
+    "certified",
+    "nasm",
+    "issa",
+    "ace",
+    "train",
+    "performance",
+    "strength",
+    "studio",
+    "gym",
+    "body",
+    "macro",
+    "macros",
+    "transform",
+    "transformation",
+    "liberty",
+    "phoenix",
+    "rose",
+    "iron",
+    "elite",
+    "premier",
+    "prime",
+    "peak",
+    "summit",
+    "apex",
+    "core",
+    "pro",
     # Common CTA / UI words that get extracted from page text
-    "here", "click", "start", "stop", "now", "join", "sign", "up",
-    "free", "mobile", "menu", "close", "open", "read", "more", "view",
-    "skip", "next", "back", "send", "submit", "download", "learn",
-    "book", "call", "apply", "schedule", "reserve", "buy", "shop",
+    "here",
+    "click",
+    "start",
+    "stop",
+    "now",
+    "join",
+    "sign",
+    "up",
+    "free",
+    "mobile",
+    "menu",
+    "close",
+    "open",
+    "read",
+    "more",
+    "view",
+    "skip",
+    "next",
+    "back",
+    "send",
+    "submit",
+    "download",
+    "learn",
+    "book",
+    "call",
+    "apply",
+    "schedule",
+    "reserve",
+    "buy",
+    "shop",
     # Business suffixes
-    "llc", "inc", "ltd", "corp", "co",
+    "llc",
+    "inc",
+    "ltd",
+    "corp",
+    "co",
     # US city names (common false positives)
-    "new", "york", "los", "angeles", "chicago", "houston", "phoenix",
-    "philadelphia", "san", "antonio", "diego", "dallas", "austin",
-    "jacksonville", "columbus", "charlotte", "denver", "seattle",
-    "boston", "nashville", "atlanta", "miami", "portland", "las", "vegas",
-    "ny", "nyc", "la",
+    "new",
+    "york",
+    "los",
+    "angeles",
+    "chicago",
+    "houston",
+    "phoenix",
+    "philadelphia",
+    "san",
+    "antonio",
+    "diego",
+    "dallas",
+    "austin",
+    "jacksonville",
+    "columbus",
+    "charlotte",
+    "denver",
+    "seattle",
+    "boston",
+    "nashville",
+    "atlanta",
+    "miami",
+    "portland",
+    "las",
+    "vegas",
+    "ny",
+    "nyc",
+    "la",
 }
 
 _COMMON_FIRST_NAMES = {
-    "alex", "alexis", "amanda", "amy", "andrew", "anna", "anthony", "ashley",
-    "ben", "brandon", "brian", "brittany",
-    "cameron", "carlos", "chris", "christina", "courtney",
-    "dan", "daniel", "david", "devin", "dylan",
-    "elizabeth", "emily", "emma", "eric", "ethan",
-    "hannah", "heather",
-    "jacob", "jake", "james", "jason", "jennifer", "jessica", "joe", "john", "jon", "jordan", "josh", "julia",
-    "kaitlyn", "karen", "kate", "katie", "kayla", "kevin", "kim", "kristen", "kyle",
-    "lauren", "lisa", "luke",
-    "maria", "mark", "matt", "matthew", "megan", "melissa", "michael", "mike", "molly",
-    "natalie", "nick", "nicole",
+    "alex",
+    "alexis",
+    "amanda",
+    "amy",
+    "andrew",
+    "anna",
+    "anthony",
+    "ashley",
+    "ben",
+    "brandon",
+    "brian",
+    "brittany",
+    "cameron",
+    "carlos",
+    "chris",
+    "christina",
+    "courtney",
+    "dan",
+    "daniel",
+    "david",
+    "devin",
+    "dylan",
+    "elizabeth",
+    "emily",
+    "emma",
+    "eric",
+    "ethan",
+    "hannah",
+    "heather",
+    "jacob",
+    "jake",
+    "james",
+    "jason",
+    "jennifer",
+    "jessica",
+    "joe",
+    "john",
+    "jon",
+    "jordan",
+    "josh",
+    "julia",
+    "kaitlyn",
+    "karen",
+    "kate",
+    "katie",
+    "kayla",
+    "kevin",
+    "kim",
+    "kristen",
+    "kyle",
+    "lauren",
+    "lisa",
+    "luke",
+    "maria",
+    "mark",
+    "matt",
+    "matthew",
+    "megan",
+    "melissa",
+    "michael",
+    "mike",
+    "molly",
+    "natalie",
+    "nick",
+    "nicole",
     "olivia",
-    "patrick", "paul",
-    "rachel", "rebecca", "ryan",
-    "sam", "samantha", "sarah", "scott", "shannon", "steph", "stephanie", "steven",
-    "taylor", "thomas", "tiffany", "tyler",
+    "patrick",
+    "paul",
+    "rachel",
+    "rebecca",
+    "ryan",
+    "sam",
+    "samantha",
+    "sarah",
+    "scott",
+    "shannon",
+    "steph",
+    "stephanie",
+    "steven",
+    "taylor",
+    "thomas",
+    "tiffany",
+    "tyler",
     "victoria",
     "zach",
 }
 
 
 def _fetch(url: str) -> requests.Response:
-    response = requests.get(url, headers={"User-Agent": settings.user_agent}, timeout=settings.request_timeout_seconds)
+    response = requests.get(
+        url,
+        headers={"User-Agent": settings.user_agent},
+        timeout=settings.request_timeout_seconds,
+    )
     response.raise_for_status()
     time.sleep(settings.website_delay_seconds)
     return response
@@ -160,7 +355,10 @@ def crawl_website(base_url: str) -> Dict[str, object]:
             if any(hint in href_lower for hint in BOOKING_HINTS) and not booking_link:
                 booking_link = full_url
 
-            if any(key in href_lower for key in ["pricing", "investment", "plans"]) and not pricing_page:
+            if (
+                any(key in href_lower for key in ["pricing", "investment", "plans"])
+                and not pricing_page
+            ):
                 pricing_page = full_url
 
         if not phone:
@@ -169,15 +367,27 @@ def crawl_website(base_url: str) -> Dict[str, object]:
     unique_emails = sorted(set(emails))
     full_text = "\n".join(text_chunks)
     _online_hints = [
-        "online coaching", "virtual coaching", "remote coaching",
-        "online personal training", "virtual personal training",
-        "remote personal training", "1:1 online", "1-on-1 online",
-        "online 1:1", "online 1-on-1", "train from anywhere",
-        "coach you online", "coaching online", "train online",
-        "virtual training", "remote training",
+        "online coaching",
+        "virtual coaching",
+        "remote coaching",
+        "online personal training",
+        "virtual personal training",
+        "remote personal training",
+        "1:1 online",
+        "1-on-1 online",
+        "online 1:1",
+        "online 1-on-1",
+        "train from anywhere",
+        "coach you online",
+        "coaching online",
+        "train online",
+        "virtual training",
+        "remote training",
     ]
     lower_full = full_text.lower()
-    offers_online_coaching = "yes" if any(h in lower_full for h in _online_hints) else "unknown"
+    offers_online_coaching = (
+        "yes" if any(h in lower_full for h in _online_hints) else "unknown"
+    )
 
     # Try to extract a person's name from the site title or meta description
     contact_name = _extract_contact_name(title, description)
@@ -234,9 +444,17 @@ def _extract_contact_name(title: str, description: str) -> str:
 def _clean_name_candidate(text: str) -> str:
     """Check if text contains a likely person's name and extract it."""
     # Remove common prefixes
-    for prefix in ["coach ", "train with ", "meet ", "about ", "hi i'm ", "i'm ", "hey i'm "]:
+    for prefix in [
+        "coach ",
+        "train with ",
+        "meet ",
+        "about ",
+        "hi i'm ",
+        "i'm ",
+        "hey i'm ",
+    ]:
         if text.lower().startswith(prefix):
-            text = text[len(prefix):]
+            text = text[len(prefix) :]
 
     # Remove possessives
     text = re.sub(r"'s\b", "", text)
@@ -268,11 +486,8 @@ def _clean_name_candidate(text: str) -> str:
         return ""
 
     return " ".join(name_words)
-    return ""
 
 
 def _extract_phone(text: str) -> str:
-    import re
-
     match = re.search(r"(?:\+1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}", text)
     return match.group(0) if match else ""
