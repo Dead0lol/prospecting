@@ -268,6 +268,9 @@ def _fetch(url: str):
         timeout=settings.request_timeout_seconds,
     )
     if response.status >= 400:
+        reason = getattr(response, "reason", "")
+        if reason:
+            raise RuntimeError(f"HTTP {response.status} {reason} for {url}")
         raise RuntimeError(f"HTTP {response.status} for {url}")
     time.sleep(settings.website_delay_seconds)
     return response
@@ -300,7 +303,7 @@ def crawl_website(base_url: str) -> Dict[str, object]:
         except Exception:
             continue
 
-        html = response.body.decode("utf-8", errors="ignore")
+        html = response.body.decode("utf-8", errors="replace")
         pages[page_url] = html
         text = " ".join(chunk.strip() for chunk in response.css("::text").getall() if chunk.strip())
         text_chunks.append(text)
