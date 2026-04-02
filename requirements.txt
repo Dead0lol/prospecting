@@ -5,8 +5,7 @@ streamlit
 pandas
 
 # Web Scraping & HTTP
-requests
-beautifulsoup4
+scrapling
 
 # Search & Discovery
 ddgs
