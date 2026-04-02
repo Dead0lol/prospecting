@@ -265,7 +265,6 @@ def _fetch(url: str):
     response = Fetcher.get(
         url,
         headers={"User-Agent": settings.user_agent},
-        stealthy_headers=False,
         timeout=settings.request_timeout_seconds,
     )
     if response.status >= 400:
@@ -302,7 +301,7 @@ def crawl_website(base_url: str) -> Dict[str, object]:
             continue
 
         html = response.body.decode("utf-8", errors="ignore")
-        pages[response.url] = html
+        pages[page_url] = html
         text = " ".join(chunk.strip() for chunk in response.css("::text").getall() if chunk.strip())
         text_chunks.append(text)
 
