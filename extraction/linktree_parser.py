@@ -15,6 +15,9 @@ def parse_link_hub(url: str) -> Dict[str, object]:
         timeout=settings.request_timeout_seconds,
     )
     if response.status >= 400:
+        reason = getattr(response, "reason", "")
+        if reason:
+            raise RuntimeError(f"HTTP {response.status} {reason} for {url}")
         raise RuntimeError(f"HTTP {response.status} for {url}")
 
     links: List[str] = []

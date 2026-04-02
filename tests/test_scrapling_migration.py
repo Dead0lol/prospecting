@@ -41,10 +41,16 @@ def test_parse_link_hub_extracts_links_with_scrapling(monkeypatch) -> None:
 
 
 def test_resolve_external_url_uses_scrapling_fetcher(monkeypatch) -> None:
+    call_kwargs = {}
+
+    def _mock_get(url, **kwargs):
+        call_kwargs.update(kwargs)
+        return _response("https://coach.example.com/home", "<html></html>")
+
     monkeypatch.setattr(
         link_resolver.Fetcher,
         "get",
-        lambda url, **kwargs: _response("https://coach.example.com/home", "<html></html>"),
+        _mock_get,
     )
 
     resolved = link_resolver.resolve_external_url("https://short.url/x")
@@ -53,6 +59,9 @@ def test_resolve_external_url_uses_scrapling_fetcher(monkeypatch) -> None:
         "resolved_url": "https://coach.example.com/home",
         "resolved_type": "website",
     }
+    assert call_kwargs["follow_redirects"] is True
+    assert call_kwargs["headers"]["User-Agent"]
+    assert call_kwargs["timeout"] > 0
 
 
 def test_crawl_website_extracts_core_signals_from_scrapling_response(monkeypatch) -> None:
