@@ -33,7 +33,6 @@ def resolve_external_url(url: str) -> Dict[str, str]:
             headers={"User-Agent": settings.user_agent},
             timeout=settings.request_timeout_seconds,
             follow_redirects=True,
-            stealthy_headers=False,
         )
         resolved = response.url
     except Exception:

@@ -12,7 +12,6 @@ def parse_link_hub(url: str) -> Dict[str, object]:
     response = Fetcher.get(
         url,
         headers={"User-Agent": settings.user_agent},
-        stealthy_headers=False,
         timeout=settings.request_timeout_seconds,
     )
     if response.status >= 400:
