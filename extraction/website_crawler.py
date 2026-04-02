@@ -5,8 +5,7 @@ import time
 from typing import Dict, List
 from urllib.parse import urljoin, urlparse
 
-import requests
-from bs4 import BeautifulSoup
+from scrapling.fetchers import Fetcher
 
 from config.settings import settings
 from extraction.email_extractor import extract_emails
@@ -262,13 +261,15 @@ _COMMON_FIRST_NAMES = {
 }
 
 
-def _fetch(url: str) -> requests.Response:
-    response = requests.get(
+def _fetch(url: str):
+    response = Fetcher.get(
         url,
         headers={"User-Agent": settings.user_agent},
+        stealthy_headers=False,
         timeout=settings.request_timeout_seconds,
     )
-    response.raise_for_status()
+    if response.status >= 400:
+        raise RuntimeError(f"HTTP {response.status} for {url}")
     time.sleep(settings.website_delay_seconds)
     return response
 
@@ -300,10 +301,9 @@ def crawl_website(base_url: str) -> Dict[str, object]:
         except Exception:
             continue
 
-        html = response.text
-        pages[page_url] = html
-        soup = BeautifulSoup(html, "html.parser")
-        text = " ".join(soup.stripped_strings)
+        html = response.body.decode("utf-8", errors="ignore")
+        pages[response.url] = html
+        text = " ".join(chunk.strip() for chunk in response.css("::text").getall() if chunk.strip())
         text_chunks.append(text)
 
         # Extract emails from visible text AND from raw HTML (catches obfuscated/hidden emails)
@@ -311,10 +311,11 @@ def crawl_website(base_url: str) -> Dict[str, object]:
         emails.extend(extract_emails(html))
 
         if not title:
-            title = soup.title.text.strip() if soup.title and soup.title.text else ""
+            title = (response.css("title::text").get() or "").strip()
         if not description:
-            meta = soup.find("meta", attrs={"name": "description"})
-            description = meta.get("content", "").strip() if meta else ""
+            description = (
+                response.css('meta[name="description"]::attr(content)').get() or ""
+            ).strip()
 
         lower_html = html.lower()
         lower_text = text.lower()
@@ -341,8 +342,10 @@ def crawl_website(base_url: str) -> Dict[str, object]:
             if service_hint in lower_text and service_hint not in services:
                 services.append(service_hint)
 
-        for anchor in soup.find_all("a", href=True):
-            href = anchor["href"].strip()
+        for anchor in response.css("a[href]"):
+            href = anchor.attrib.get("href", "").strip()
+            if not href:
+                continue
             full_url = urljoin(page_url, href)
             href_lower = full_url.lower()
 

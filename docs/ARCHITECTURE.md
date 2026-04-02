@@ -16,7 +16,7 @@ The Fitness Coach Prospecting Pipeline is an automated B2B lead generation syste
 | Web UI             | Streamlit                           | Dashboard, lead browser, run controls        |
 | Data manipulation  | Pandas                              | DataFrames for UI tables/charts              |
 | Search engine      | DuckDuckGo (`ddgs` / ddgstealth)    | Primary discovery source                     |
-| Web scraping       | Requests + BeautifulSoup4           | Website crawling and HTML parsing            |
+| Web scraping       | Scrapling                           | Website crawling and HTML parsing            |
 | Email verification | Raw SMTP (`smtplib`) + DNS (`dnspython`) | Mailbox existence checks               |
 | AI classification  | Google Gemini 2.0 Flash (optional)  | Lead classification (disabled by default)    |
 | Instagram          | Instaloader (blocked, unused)       | IG data now parsed from DDG snippets         |

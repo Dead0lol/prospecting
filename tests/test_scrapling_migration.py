@@ -1,0 +1,89 @@
+from scrapling.engines.toolbelt.custom import Response
+
+from extraction import linktree_parser, website_crawler
+from resolution import link_resolver
+
+
+def _response(url: str, html: str, status: int = 200) -> Response:
+    return Response(
+        url=url,
+        content=html,
+        status=status,
+        reason="OK" if status < 400 else "Error",
+        cookies={},
+        headers={},
+        request_headers={},
+    )
+
+
+def test_parse_link_hub_extracts_links_with_scrapling(monkeypatch) -> None:
+    html = """
+    <html><body>
+      <a href="/about">About</a>
+      <a href="https://coach.example.com">Site</a>
+      <a href="mailto:coach@example.com">Email</a>
+    </body></html>
+    """
+    monkeypatch.setattr(
+        linktree_parser.Fetcher,
+        "get",
+        lambda url, **kwargs: _response(url, html),
+    )
+
+    parsed = linktree_parser.parse_link_hub("https://linktr.ee/coach")
+
+    assert "About" in parsed["text"]
+    assert parsed["links"] == [
+        "https://coach.example.com",
+        "https://linktr.ee/about",
+        "mailto:coach@example.com",
+    ]
+
+
+def test_resolve_external_url_uses_scrapling_fetcher(monkeypatch) -> None:
+    monkeypatch.setattr(
+        link_resolver.Fetcher,
+        "get",
+        lambda url, **kwargs: _response("https://coach.example.com/home", "<html></html>"),
+    )
+
+    resolved = link_resolver.resolve_external_url("https://short.url/x")
+
+    assert resolved == {
+        "resolved_url": "https://coach.example.com/home",
+        "resolved_type": "website",
+    }
+
+
+def test_crawl_website_extracts_core_signals_from_scrapling_response(monkeypatch) -> None:
+    html = """
+    <html>
+      <head>
+        <title>Alex Carter | Online Fitness Coach</title>
+        <meta name="description" content="Coach Alex helps with online coaching." />
+      </head>
+      <body>
+        Contact us: coach@example.com
+        <a href="mailto:hello@example.com">Email</a>
+        <a href="https://instagram.com/alexcoach">IG</a>
+        <a href="https://calendly.com/alex/book">Book</a>
+        <a href="/pricing">Pricing</a>
+        <div>testimonials and client results</div>
+        <div>online coaching and nutrition coaching</div>
+      </body>
+    </html>
+    """
+
+    monkeypatch.setattr(website_crawler.settings, "max_pages_per_site", 1)
+    monkeypatch.setattr(website_crawler, "_fetch", lambda url: _response(url, html))
+
+    result = website_crawler.crawl_website("https://coach.example.com")
+
+    assert result["website_title"] == "Alex Carter | Online Fitness Coach"
+    assert result["website_description"] == "Coach Alex helps with online coaching."
+    assert result["emails"] == ["coach@example.com", "hello@example.com"]
+    assert result["socials"]["instagram_url"] == "https://instagram.com/alexcoach"
+    assert result["booking_link"] == "https://calendly.com/alex/book"
+    assert result["has_pricing_page"] is True
+    assert result["has_testimonials"] is True
+    assert result["offers_online_coaching"] == "yes"

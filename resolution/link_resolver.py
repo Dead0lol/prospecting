@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict
 from urllib.parse import urlparse
 
-import requests
+from scrapling.fetchers import Fetcher
 
 from config.settings import settings
 
@@ -28,11 +28,12 @@ def resolve_external_url(url: str) -> Dict[str, str]:
         return {"resolved_url": "", "resolved_type": "unknown"}
 
     try:
-        response = requests.get(
+        response = Fetcher.get(
             url,
             headers={"User-Agent": settings.user_agent},
             timeout=settings.request_timeout_seconds,
-            allow_redirects=True,
+            follow_redirects=True,
+            stealthy_headers=False,
         )
         resolved = response.url
     except Exception:

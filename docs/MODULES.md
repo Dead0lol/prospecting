@@ -97,7 +97,7 @@ URL classification, filtering, and blocklist management.
 
 ### `extraction/website_crawler.py` (275 lines)
 
-Website content extraction via HTTP + BeautifulSoup.
+Website content extraction via Scrapling fetchers and selectors.
 
 **Key function:**
 
