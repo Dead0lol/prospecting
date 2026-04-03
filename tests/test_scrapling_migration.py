@@ -18,6 +18,12 @@ def _response(url: str, html: str, status: int = 200) -> Response:
     )
 
 
+def _patch_fetcher_get(monkeypatch, handler) -> None:
+    monkeypatch.setattr(linktree_parser.Fetcher, "get", handler)
+    monkeypatch.setattr(link_resolver.Fetcher, "get", handler)
+    monkeypatch.setattr(website_crawler.Fetcher, "get", handler)
+
+
 def test_parse_link_hub_extracts_links_with_scrapling(monkeypatch) -> None:
     html = """
     <html><body>
@@ -120,3 +126,66 @@ def test_crawl_website_resolves_relative_links_from_final_response_url(monkeypat
     result = cast(Dict[str, Any], website_crawler.crawl_website("https://short.url/coach"))
 
     assert result["pricing_page"] == "https://coach.example.com/pricing"
+
+
+def test_scrapling_flow_end_to_end_is_stable_across_link_order(monkeypatch) -> None:
+    link_hub_html = """
+    <html><body>
+      <a href="#top">Skip</a>
+      <a href="mailto:coach@example.com">Email</a>
+      <a href="offers">Offers</a>
+      <a href="https://short.url/site">Website</a>
+      <a href="javascript:void(0)">Ignore</a>
+    </body></html>
+    """
+    site_html = """
+    <html>
+      <head>
+        <title>Alex Carter Coaching</title>
+        <meta name="description" content="Remote coaching for busy professionals." />
+      </head>
+      <body>
+        coach@example.com
+        <a href="/pricing">Pricing</a>
+        <a href="https://instagram.com/alexcoach">Instagram</a>
+        <a href="https://calendly.com/alex/intro">Book</a>
+        <div>client results and testimonials</div>
+        <div>online coaching and strength training</div>
+      </body>
+    </html>
+    """
+
+    def _mock_get(url, **kwargs):
+        if url == "https://linktr.ee/alex":
+            return _response(url, link_hub_html)
+        if url == "https://short.url/site":
+            return _response("https://coach.example.com/welcome/", "<html></html>")
+        if url.startswith("https://coach.example.com"):
+            return _response("https://coach.example.com/welcome/", site_html)
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(website_crawler.settings, "max_pages_per_site", 1)
+    _patch_fetcher_get(monkeypatch, _mock_get)
+
+    parsed = cast(Dict[str, Any], linktree_parser.parse_link_hub("https://linktr.ee/alex"))
+    assert set(cast(list[str], parsed["links"])) == {
+        "https://linktr.ee/offers",
+        "https://short.url/site",
+        "mailto:coach@example.com",
+    }
+
+    resolved = link_resolver.resolve_external_url("https://short.url/site")
+    assert resolved == {
+        "resolved_url": "https://coach.example.com/welcome/",
+        "resolved_type": "website",
+    }
+
+    crawled = cast(Dict[str, Any], website_crawler.crawl_website(resolved["resolved_url"]))
+    assert crawled["website_title"] == "Alex Carter Coaching"
+    assert crawled["website_description"] == "Remote coaching for busy professionals."
+    assert set(cast(list[str], crawled["emails"])) == {"coach@example.com"}
+    assert crawled["pricing_page"] == "https://coach.example.com/pricing"
+    assert crawled["booking_link"] == "https://calendly.com/alex/intro"
+    assert cast(dict[str, str], crawled["socials"])["instagram_url"] == "https://instagram.com/alexcoach"
+    assert crawled["has_testimonials"] is True
+    assert crawled["offers_online_coaching"] == "yes"

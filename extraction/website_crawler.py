@@ -370,7 +370,7 @@ def crawl_website(base_url: str) -> Dict[str, object]:
 
             if (
                 any(key in href_lower for key in ["pricing", "investment", "plans"])
-                and not pricing_page
+                and (not pricing_page or pricing_page == page_url)
             ):
                 pricing_page = full_url
 
