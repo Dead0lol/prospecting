@@ -22,7 +22,7 @@ cd prospecting
 The `requirements.txt` is **incomplete** - it only lists `streamlit` and `pandas`. Install all actual dependencies:
 
 ```bash
-pip install streamlit pandas ddgs scrapling gspread dnspython instaloader python-dotenv google-generativeai
+pip install streamlit pandas ddgs "scrapling[fetchers]" gspread dnspython instaloader python-dotenv google-generativeai
 ```
 
 Or use the corrected requirements (see [CODE_REVIEW.md](CODE_REVIEW.md) for the recommended fix):
@@ -31,7 +31,7 @@ Or use the corrected requirements (see [CODE_REVIEW.md](CODE_REVIEW.md) for the 
 streamlit
 pandas
 ddgs
-scrapling
+scrapling[fetchers]
 gspread
 dnspython
 instaloader

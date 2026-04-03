@@ -5,7 +5,7 @@ streamlit
 pandas
 
 # Web Scraping & HTTP
-scrapling
+scrapling[fetchers]
 
 # Search & Discovery
 ddgs
