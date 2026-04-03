@@ -276,6 +276,13 @@ def _fetch(url: str):
     return response
 
 
+def _response_html(response) -> str:
+    body = response.body
+    if isinstance(body, bytes):
+        return body.decode(response.encoding, errors="replace")
+    return body
+
+
 def crawl_website(base_url: str) -> Dict[str, object]:
     """Fetch likely contact pages and extract lead signals from the site."""
     parsed = urlparse(base_url)
@@ -303,9 +310,9 @@ def crawl_website(base_url: str) -> Dict[str, object]:
         except Exception:
             continue
 
-        html = response.body.decode("utf-8", errors="replace")
+        html = _response_html(response)
         pages[page_url] = html
-        text = " ".join(chunk.strip() for chunk in response.css("::text").getall() if chunk.strip())
+        text = str(response.get_all_text(separator=" ", strip=True))
         text_chunks.append(text)
 
         # Extract emails from visible text AND from raw HTML (catches obfuscated/hidden emails)
@@ -348,7 +355,7 @@ def crawl_website(base_url: str) -> Dict[str, object]:
             href = anchor.attrib.get("href", "").strip()
             if not href:
                 continue
-            full_url = urljoin(page_url, href)
+            full_url = urljoin(response.url, href)
             href_lower = full_url.lower()
 
             if href_lower.startswith("mailto:"):

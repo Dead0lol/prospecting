@@ -25,10 +25,12 @@ def parse_link_hub(url: str) -> Dict[str, object]:
         href = anchor.attrib.get("href", "").strip()
         if not href:
             continue
-        if href.startswith("/"):
-            href = urljoin(url, href)
+        if href.startswith(("#", "javascript:", "tel:")):
+            continue
+        if not href.startswith(("http://", "https://", "mailto:")):
+            href = urljoin(response.url, href)
         if href.startswith("http") or href.startswith("mailto:"):
             links.append(href)
 
-    text = " ".join(chunk.strip() for chunk in response.css("::text").getall() if chunk.strip())
+    text = str(response.get_all_text(separator=" ", strip=True))
     return {"text": text, "links": sorted(set(links))}

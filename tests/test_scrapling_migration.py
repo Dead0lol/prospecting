@@ -1,3 +1,5 @@
+from typing import Any, Dict, cast
+
 from scrapling.engines.toolbelt.custom import Response
 
 from extraction import linktree_parser, website_crawler
@@ -20,6 +22,7 @@ def test_parse_link_hub_extracts_links_with_scrapling(monkeypatch) -> None:
     html = """
     <html><body>
       <a href="/about">About</a>
+      <a href="offers">Offers</a>
       <a href="https://coach.example.com">Site</a>
       <a href="mailto:coach@example.com">Email</a>
     </body></html>
@@ -30,12 +33,13 @@ def test_parse_link_hub_extracts_links_with_scrapling(monkeypatch) -> None:
         lambda url, **kwargs: _response(url, html),
     )
 
-    parsed = linktree_parser.parse_link_hub("https://linktr.ee/coach")
+    parsed = cast(Dict[str, Any], linktree_parser.parse_link_hub("https://linktr.ee/coach"))
 
     assert "About" in parsed["text"]
     assert parsed["links"] == [
         "https://coach.example.com",
         "https://linktr.ee/about",
+        "https://linktr.ee/offers",
         "mailto:coach@example.com",
     ]
 
@@ -77,6 +81,7 @@ def test_crawl_website_extracts_core_signals_from_scrapling_response(monkeypatch
         <a href="https://instagram.com/alexcoach">IG</a>
         <a href="https://calendly.com/alex/book">Book</a>
         <a href="/pricing">Pricing</a>
+        <script>pricing hidden in scripts should not be parsed as visible text</script>
         <div>testimonials and client results</div>
         <div>online coaching and nutrition coaching</div>
       </body>
@@ -86,7 +91,7 @@ def test_crawl_website_extracts_core_signals_from_scrapling_response(monkeypatch
     monkeypatch.setattr(website_crawler.settings, "max_pages_per_site", 1)
     monkeypatch.setattr(website_crawler, "_fetch", lambda url: _response(url, html))
 
-    result = website_crawler.crawl_website("https://coach.example.com")
+    result = cast(Dict[str, Any], website_crawler.crawl_website("https://coach.example.com"))
 
     assert result["website_title"] == "Alex Carter | Online Fitness Coach"
     assert result["website_description"] == "Coach Alex helps with online coaching."
@@ -96,3 +101,22 @@ def test_crawl_website_extracts_core_signals_from_scrapling_response(monkeypatch
     assert result["has_pricing_page"] is True
     assert result["has_testimonials"] is True
     assert result["offers_online_coaching"] == "yes"
+
+
+def test_crawl_website_resolves_relative_links_from_final_response_url(monkeypatch) -> None:
+    html = """
+    <html><body>
+      <a href="/pricing">Pricing</a>
+    </body></html>
+    """
+
+    monkeypatch.setattr(website_crawler.settings, "max_pages_per_site", 1)
+    monkeypatch.setattr(
+        website_crawler,
+        "_fetch",
+        lambda url: _response("https://coach.example.com/landing/", html),
+    )
+
+    result = cast(Dict[str, Any], website_crawler.crawl_website("https://short.url/coach"))
+
+    assert result["pricing_page"] == "https://coach.example.com/pricing"
