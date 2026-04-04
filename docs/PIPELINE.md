@@ -95,10 +95,11 @@ Run N: wraps around to start
 
 ### Instagram candidates (fill remaining slots):
 
-1. `_parse_ig_snippet()` extracts name, followers, bio from the DuckDuckGo search result text (no Instaloader API call)
-2. `_find_website_for_ig_lead()` runs a secondary DDG search to find the coach's website, with relevance validation
-3. IG-only leads without a discoverable website are **dropped** (they score 16-24, considered useless for cold email)
-4. Same website crawl and email extraction as above
+1. `_parse_ig_snippet()` extracts name, followers, bio from the DuckDuckGo search result text (no direct Instagram API call)
+2. `_find_website_for_ig_lead()` runs a targeted follow-up search to find the coach's website, with relevance validation
+3. That single-query path uses DuckDuckGo with enhanced retry logic for reliability
+4. IG-only leads without a discoverable website are **dropped** (they score 16-24, considered useless for cold email)
+5. Same website crawl and email extraction as above
 
 ### Processing order:
 ```
@@ -142,7 +143,7 @@ Website candidates first (limit * 3 max attempts)
 ## Phase 5: Classification & Scoring
 
 **Functions:** `classify_and_score()` (line 416)
-**Modules:** `enrichment/gemini_classifier.py`, `scoring/lead_scorer.py`
+**Modules:** `enrichment/ai_classifier.py`, `scoring/lead_scorer.py`
 
 ### Classification:
 
@@ -156,8 +157,8 @@ Website candidates first (limit * 3 max attempts)
 - Identifies weakness for outreach angle
 - Generates outreach angle and personalization note
 
-**Gemini AI mode (optional, disabled by default):**
-- Sends structured prompt with lead data to `gemini-2.0-flash`
+**OpenRouter AI mode (optional, disabled by default):**
+- Sends structured prompt data through OpenRouter chat completions
 - Expects JSON response with classification fields
 - Falls back to heuristic on any error
 

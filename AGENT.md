@@ -27,10 +27,15 @@ CLI, Streamlit UI, caches, and Google Sheets export.
   data, and inspecting cache/checkpoint state.
 - Discovery is keyword-based and global. Geography is mostly cosmetic;
   city targeting is intentionally not part of the active strategy.
+- Both bulk discovery and one-off coach-site lookups use DuckDuckGo.
 - Website candidates are processed before Instagram candidates because
   they produce stronger, more contactable leads.
 - Instagram-only leads without a discoverable real website are
   intentionally dropped.
+- Website crawling treats the final fetched URL after redirects as the
+  canonical base for relative links and follow-up path hints.
+- Optional AI classification now goes through OpenRouter, with
+  heuristic classification as the fallback path.
 - Email verification happens in batch after candidate collection.
 - Export writes tiered snapshots plus cumulative history to Google
   Sheets.
@@ -96,8 +101,8 @@ as a project-level contract change.
 - The active strategy is keyword-first prospecting for fitness coaches.
 - Query rotation in `.cache/discovery_state.json` is intentional and
   should be preserved unless explicitly redesigned.
-- Deprecated geography artifacts may still exist for backward
-  compatibility, but they are not the operating strategy.
+- Both bulk discovery and individual coach-site lookups use DuckDuckGo
+  with retry logic for reliability.
 
 ### Instagram handling
 
@@ -106,6 +111,12 @@ as a project-level contract change.
   website discovery.
 - If Instagram logic changes, review both discovery quality and lead
   cost because weak IG-only leads are intentionally filtered out.
+
+### Email extraction
+
+- Vendor telemetry emails should be treated as noise, not leads.
+- `extraction/email_extractor.py` filters service addresses such as
+  Wix/Sentry telemetry mailboxes before lead selection.
 
 ## Files That Usually Need Joint Updates
 

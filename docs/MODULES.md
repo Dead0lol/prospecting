@@ -14,7 +14,6 @@ Central settings management using a Python dataclass.
 - `settings` - Singleton `Settings` instance, created at import time
 
 **Functions:**
-- `_split_csv(value, default)` - Parses comma-separated string into list
 - `_get_bool(value, default)` - Parses boolean from string ("1", "true", "yes", "on")
 
 **Notes:**
@@ -34,12 +33,6 @@ Discovery keyword definitions organized by ICP conversion priority.
 - `COACH_PLATFORM_DOMAINS` - 9 accepted coach platform domains
 - `COACH_DIRECTORY_DOMAINS` - 4 accepted directory domains
 - Individual tier lists: `DIGITAL_SELLER_KEYWORDS`, `ONLINE_COACH_KEYWORDS`, `TRANSFORMATION_KEYWORDS`, `NICHE_COACH_KEYWORDS`, `BUSINESS_COACH_KEYWORDS`
-
----
-
-### `config/cities.py` (13 lines)
-
-**DEPRECATED.** Contains only `US_TARGET_CITIES = []`. Not imported or used anywhere.
 
 ---
 
@@ -63,6 +56,21 @@ DuckDuckGo search integration using the `ddgs` library.
 - `_log()` - Timestamped logging
 
 **Retry strategy:** For each query, tries `us-en` region first, then `wt-wt` (worldwide). For Instagram queries, also tries rearranged `site:` prefix position.
+
+---
+
+### `discovery/individual_search.py`
+
+Single-query website lookup routing for Instagram follow-up searches.
+
+**Key functions:**
+
+| Function                  | Signature                                        | Description                                       |
+|---------------------------|--------------------------------------------------|---------------------------------------------------|
+| `search_individual_query()` | `(query, max_results=None) -> List[Dict]`      | Uses DuckDuckGo with enhanced retry logic |
+
+**Internal functions:**
+- None (simple wrapper around DDG search)
 
 ---
 
@@ -122,7 +130,7 @@ Website content extraction via Scrapling fetchers and selectors.
 
 ---
 
-### `extraction/email_extractor.py` (31 lines)
+### `extraction/email_extractor.py`
 
 Regex-based email extraction.
 
@@ -132,6 +140,7 @@ Regex-based email extraction.
 | `pick_best_email()`| Prioritizes domain-matching emails, then common prefixes      |
 
 **Priority order for `pick_best_email()`:** hello@ > contact@ > info@ > coach@ > admin@
+**Filtering notes:** rejects common placeholder addresses plus vendor telemetry mailboxes such as Wix/Sentry-style service emails.
 
 ---
 
@@ -167,17 +176,17 @@ Link hub page parser for Linktree, Beacons, Stan Store.
 
 ## `enrichment/` - Classification
 
-### `enrichment/gemini_classifier.py` (140 lines)
+### `enrichment/ai_classifier.py`
 
 AI and heuristic lead classification.
 
 | Function              | Description                                              |
 |-----------------------|----------------------------------------------------------|
-| `classify_lead()`     | Dispatches to Gemini AI or heuristic based on settings   |
+| `classify_lead()`     | Dispatches to OpenRouter or heuristic based on settings  |
 | `heuristic_classify()`| Keyword-based classification (default mode)              |
 
-**Gemini mode:**
-- Sends structured prompt with lead data to `gemini-2.0-flash`
+**OpenRouter mode:**
+- Sends chat-completions requests through OpenRouter
 - Expects JSON response with 9 classification fields
 - Falls back to heuristic on any error
 
@@ -284,15 +293,11 @@ See [DATA_MODEL.md](DATA_MODEL.md) for complete field reference.
 
 ### `resolution/instagram_profile.py` (61 lines)
 
-Instagram profile handling. **Note:** `fetch_profile()` is dead code - blocked by Instagram.
+Instagram URL normalization.
 
 | Function               | Description                                           |
 |------------------------|-------------------------------------------------------|
-| `normalize_username()` | Extracts IG username from URL or handle (ACTIVE)      |
-| `fetch_profile()`      | Instaloader profile fetch (DEAD CODE - blocked by IG) |
-| `get_loader()`         | Lazy Instaloader initialization (DEAD CODE)           |
-
-Only `normalize_username()` is actively used by the pipeline.
+| `normalize_username()` | Extracts IG username from URL or handle               |
 
 ---
 
