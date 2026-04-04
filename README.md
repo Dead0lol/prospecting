@@ -9,10 +9,11 @@ An automated B2B lead generation tool that discovers English-speaking fitness co
 1. **Discovers** fitness coaches via DuckDuckGo keyword searches (no city targeting — global reach)
 2. **Looks up** coach websites via DuckDuckGo with enhanced retry logic for one-off queries
 3. **Crawls** their websites and link hub pages for emails, booking links, Instagram, and social profiles
-4. **Verifies** email deliverability via SMTP
-5. **Scores** leads based on ICP signals (email validity, online coaching presence, digital seller indicators)
-6. **Deduplicates** across all prior runs
-7. **Exports** to Google Sheets split by tier: Hot / Good / Review
+4. **Generates** personalized icebreakers for each lead using AI analysis of their website content
+5. **Verifies** email deliverability via SMTP
+6. **Scores** leads based on ICP signals (email validity, online coaching presence, digital seller indicators)
+7. **Deduplicates** across all prior runs
+8. **Exports** to Google Sheets split by tier: Hot / Good / Review
 
 **Target:** 30–50 fresh, usable leads per run.
 
@@ -26,6 +27,8 @@ Discovery (DuckDuckGo keyword search)
 Pre-filtering (blocklists, seen-lead suppression, query rotation)
     ↓
 Enrichment (website crawl, email extraction, link hub resolution)
+    ↓
+Icebreaker generation (AI-powered personalized compliments)
     ↓
 Verification (parallel SMTP check, disk-cached)
     ↓
@@ -157,6 +160,8 @@ All settings are in `config/settings.py` or set via environment variables in `.e
 | `hot_lead_threshold` | `65` | Minimum score for Hot tier |
 | `good_lead_threshold` | `45` | Minimum score for Good tier |
 | `ENABLE_AI` | `false` | Use OpenRouter for classification (slower, requires API key) |
+| `ICEBREAKER_TONE` | `professional and respectful` | Tone/style for AI-generated icebreakers |
+| `ICEBREAKER_LENGTH` | `2` | Number of sentences for icebreakers (1-3 recommended) |
 
 ### Adding keywords
 
@@ -238,7 +243,8 @@ prospecting/
 │   ├── email_extractor.py     # Regex email finding
 │   └── linktree_parser.py      # Link hub page parsing
 ├── enrichment/
-│   └── ai_classifier.py       # OpenRouter or heuristic classification
+│   ├── ai_classifier.py        # OpenRouter or heuristic classification
+│   └── icebreaker_generator.py # AI-powered personalized icebreakers
 ├── verification/
 │   ├── email_verifier.py      # Unified Disify + SMTP verification
 │   ├── disify_client.py       # Disify API for domain validation
@@ -259,6 +265,30 @@ prospecting/
 ├── service_account.json.json  # Google service account key
 └── requirements.txt
 ```
+
+---
+
+## Advanced Features
+
+### Personalized Icebreakers
+
+The pipeline can automatically generate personalized, authentic opening lines for cold outreach emails based on each lead's website content.
+
+**What it does:**
+- Analyzes the actual text content of each lead's website
+- Uses OpenRouter AI to generate specific compliments that reference real details
+- Stores the icebreaker in the `ice` column in Google Sheets
+
+**Configuration:**
+```env
+ICEBREAKER_TONE=professional and respectful
+ICEBREAKER_LENGTH=2
+```
+
+**Example output:**
+> "I noticed your emphasis on science-based programming tailored to individual body types—that's a refreshing approach in an industry full of cookie-cutter plans."
+
+**See:** `docs/ICEBREAKER.md` for full documentation
 
 ---
 

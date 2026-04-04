@@ -31,6 +31,7 @@ from discovery.web_search import (
     split_candidate_urls,
 )
 from enrichment.ai_classifier import classify_lead
+from enrichment.icebreaker_generator import generate_icebreaker
 from export.sheets_writer import SheetsWriter
 from extraction.email_extractor import pick_best_email
 
@@ -263,6 +264,14 @@ def classify_and_score(lead: Lead) -> None:
         lead.personalization_note = ai.get("personalization_note", "")
     except Exception as exc:
         lead.notes.append(f"classify_error:{exc}")
+
+    # Generate personalized icebreaker
+    try:
+        lead.ice = generate_icebreaker(lead)
+    except Exception as exc:
+        log(f"  Icebreaker generation failed: {exc}")
+        lead.ice = ""
+
     score_lead(lead)
     log(f"  Score: {lead.lead_score} ({lead.lead_tier}) icp={lead.ai_icp_match}")
 

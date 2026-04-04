@@ -59,6 +59,8 @@ class Settings:
     )
     hot_lead_threshold: int = int(os.getenv("HOT_LEAD_THRESHOLD", "65"))
     good_lead_threshold: int = int(os.getenv("GOOD_LEAD_THRESHOLD", "45"))
+    icebreaker_tone: str = os.getenv("ICEBREAKER_TONE", "professional and respectful")
+    icebreaker_length: int = int(os.getenv("ICEBREAKER_LENGTH", "2"))
     output_cache_dir: Path = ROOT / ".cache"
 
 
