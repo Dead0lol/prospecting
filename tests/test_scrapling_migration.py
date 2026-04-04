@@ -103,6 +103,26 @@ def test_crawl_website_extracts_core_signals_from_scrapling_response(monkeypatch
     assert result["offers_online_coaching"] == "yes"
 
 
+def test_crawl_website_filters_vendor_telemetry_emails(monkeypatch) -> None:
+    html = """
+    <html>
+      <body>
+        hello@coach.example.com
+        18d2f96d279149989b95faf0a4b41882@sentry-next.wixpress.com
+      </body>
+    </html>
+    """
+
+    monkeypatch.setattr(website_crawler.settings, "max_pages_per_site", 1)
+    monkeypatch.setattr(website_crawler, "_fetch", lambda url: _response(url, html))
+
+    result = cast(
+        Dict[str, Any], website_crawler.crawl_website("https://coach.example.com")
+    )
+
+    assert result["emails"] == ["hello@coach.example.com"]
+
+
 def test_crawl_website_resolves_relative_links_from_final_response_url(monkeypatch) -> None:
     html = """
     <html><body>
@@ -120,3 +140,26 @@ def test_crawl_website_resolves_relative_links_from_final_response_url(monkeypat
     result = cast(Dict[str, Any], website_crawler.crawl_website("https://short.url/coach"))
 
     assert result["pricing_page"] == "https://coach.example.com/pricing"
+
+
+def test_crawl_website_uses_redirect_target_for_followup_paths(monkeypatch) -> None:
+    requested_urls = []
+
+    def _mock_fetch(url: str):
+        requested_urls.append(url)
+        if url == "https://short.url/coach":
+            return _response("https://coach.example.com/landing/", "<html></html>")
+        if url == "https://coach.example.com/about":
+            return _response(url, "<html></html>")
+        raise AssertionError(f"Unexpected fetch URL: {url}")
+
+    monkeypatch.setattr(website_crawler.settings, "max_pages_per_site", 2)
+    monkeypatch.setattr(website_crawler, "_fetch", _mock_fetch)
+
+    result = cast(Dict[str, Any], website_crawler.crawl_website("https://short.url/coach"))
+
+    assert requested_urls == [
+        "https://short.url/coach",
+        "https://coach.example.com/about",
+    ]
+    assert result["website"] == "https://coach.example.com/landing/"

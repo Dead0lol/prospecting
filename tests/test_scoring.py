@@ -1,5 +1,5 @@
 from models.lead import Lead
-from enrichment.gemini_classifier import heuristic_classify
+from enrichment.ai_classifier import heuristic_classify
 from scoring.lead_scorer import score_lead
 
 

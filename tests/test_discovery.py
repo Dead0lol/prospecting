@@ -2,6 +2,7 @@ from discovery.instagram_parser import parse_followers, parse_ig_snippet
 from discovery.web_search import quick_reject_website, split_candidate_urls
 from models.lead import Lead
 from pipeline import _has_coach_signals
+from resolution.instagram_profile import normalize_username
 
 
 def test_parse_followers_handles_millions_and_thousands() -> None:
@@ -75,3 +76,33 @@ def test_has_coach_signals_rejects_non_fitness_business_site() -> None:
     )
 
     assert _has_coach_signals(lead) is False
+
+
+def test_split_candidate_urls_rejects_invalid_instagram_paths() -> None:
+    split = split_candidate_urls(
+        [
+            {
+                "url": "https://www.instagram.com/explore/",
+                "title": "Instagram",
+                "body": "",
+            },
+            {
+                "url": "https://www.instagram.com/coachperson/reels/",
+                "title": "Coach Person",
+                "body": "fitness coach",
+            },
+        ]
+    )
+
+    assert split == {"instagram": [], "websites": []}
+
+
+def test_normalize_username_accepts_handles_and_rejects_non_profile_urls() -> None:
+    assert normalize_username("@CoachPerson/") == "CoachPerson"
+
+    try:
+        normalize_username("https://www.instagram.com/reel/abc123/")
+    except ValueError as exc:
+        assert "Not a profile URL" in str(exc)
+    else:
+        raise AssertionError("Expected reel URLs to be rejected")
