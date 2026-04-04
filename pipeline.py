@@ -267,10 +267,10 @@ def classify_and_score(lead: Lead) -> None:
 
     # Generate personalized icebreaker
     try:
-        lead.ice = generate_icebreaker(lead)
+        lead.ice_breaker = generate_icebreaker(lead)
     except Exception as exc:
         log(f"  Icebreaker generation failed: {exc}")
-        lead.ice = ""
+        lead.ice_breaker = ""
 
     score_lead(lead)
     log(f"  Score: {lead.lead_score} ({lead.lead_tier}) icp={lead.ai_icp_match}")

@@ -11,7 +11,7 @@ Instead of sending generic "I love your website" messages, the icebreaker genera
 1. **Content Extraction**: During website crawling, we extract the full text content of each page
 2. **AI Analysis**: The icebreaker generator sends this content (first 3000 chars) to OpenRouter AI
 3. **Personalized Generation**: The AI writes a brief, specific compliment based on the actual website content
-4. **Storage**: The icebreaker is stored in the `ice` column in Google Sheets
+4. **Storage**: The icebreaker is stored in the `ice_breaker` column in Google Sheets
 
 ## Configuration
 
@@ -55,7 +55,7 @@ Icebreakers are generated:
 Icebreakers are skipped:
 - ❌ When OpenRouter API key is not set
 - ❌ When website content is too short or unavailable
-- ❌ When API request fails (fails gracefully, leaves `ice` empty)
+- ❌ When API request fails (fails gracefully, leaves `ice_breaker` empty)
 
 ## API Usage
 
@@ -93,7 +93,7 @@ def classify_and_score(lead: Lead) -> None:
 
 ## Google Sheets
 
-The `ice` column is added to the All_Leads sheet after `personalization_note` and before `phone`.
+The `ice_breaker` column is added to the All_Leads sheet after `personalization_note` and before `phone`.
 
 ## Testing
 

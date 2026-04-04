@@ -277,7 +277,7 @@ The pipeline can automatically generate personalized, authentic opening lines fo
 **What it does:**
 - Analyzes the actual text content of each lead's website
 - Uses OpenRouter AI to generate specific compliments that reference real details
-- Stores the icebreaker in the `ice` column in Google Sheets
+- Stores the icebreaker in the `ice_breaker` column in Google Sheets
 
 **Configuration:**
 ```env
