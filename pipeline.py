@@ -22,14 +22,15 @@ from config.keywords import (
     COACH_PLATFORM_DOMAINS,
 )
 from config.settings import settings
-from discovery.duckduckgo_search import build_queries, discover_candidates, search_query
+from discovery.duckduckgo_search import build_queries, discover_candidates
+from discovery.individual_search import search_individual_query
 from discovery.instagram_parser import is_likely_name, parse_ig_snippet
 from discovery.web_search import (
     quick_reject_website,
     rank_website_candidates,
     split_candidate_urls,
 )
-from enrichment.gemini_classifier import classify_lead
+from enrichment.ai_classifier import classify_lead
 from export.sheets_writer import SheetsWriter
 from extraction.email_extractor import pick_best_email
 from extraction.email_guesser import guess_emails
@@ -345,7 +346,7 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
     for query in queries_to_try:
         log(f"  Searching for website: {query[:60]}")
         try:
-            results = search_query(query, max_results=5)
+            results = search_individual_query(query, max_results=5)
         except Exception as exc:
             log(f"  Website search failed: {exc}")
             continue
@@ -407,7 +408,7 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
     for query in hub_queries:
         log(f"  Searching link hubs: {query}")
         try:
-            results = search_query(query, max_results=3)
+            results = search_individual_query(query, max_results=3)
         except Exception:
             continue
 
@@ -448,8 +449,8 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
 def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead | None:
     """Process a single Instagram candidate into a Lead.
 
-    Uses DuckDuckGo snippet data (name, followers, bio) instead of Instaloader,
-    which is blocked by Instagram without valid login credentials.
+    Uses DuckDuckGo snippet data (name, followers, bio) instead of
+    direct Instagram scraping.
     """
     url = candidate["url"]
     log(f"IG: {url}")
