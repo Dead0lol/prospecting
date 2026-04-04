@@ -288,6 +288,7 @@ def crawl_website(base_url: str) -> Dict[str, object]:
     parsed = urlparse(base_url)
     if not parsed.scheme:
         base_url = f"https://{base_url}"
+    crawl_base_url = base_url
 
     pages: Dict[str, str] = {}
     emails: List[str] = []
@@ -304,14 +305,18 @@ def crawl_website(base_url: str) -> Dict[str, object]:
     phone = ""
 
     for path in PATH_HINTS[: settings.max_pages_per_site]:
-        page_url = urljoin(base_url, path)
+        page_url = urljoin(crawl_base_url, path)
         try:
             response = _fetch(page_url)
         except Exception:
             continue
 
+        final_page_url = str(getattr(response, "url", "") or page_url)
+        if not path:
+            crawl_base_url = final_page_url
+
         html = _response_html(response)
-        pages[page_url] = html
+        pages[final_page_url] = html
         text = str(response.get_all_text(separator=" ", strip=True))
         text_chunks.append(text)
 
@@ -344,8 +349,8 @@ def crawl_website(base_url: str) -> Dict[str, object]:
             has_lead_magnet = True
         if "testimonial" in lower_text or "client results" in lower_text:
             has_testimonials = True
-        if "pricing" in lower_text or "investment" in lower_text:
-            pricing_page = page_url
+        if ("pricing" in lower_text or "investment" in lower_text) and not pricing_page:
+            pricing_page = final_page_url
 
         for service_hint in SERVICE_HINTS:
             if service_hint in lower_text and service_hint not in services:
@@ -368,9 +373,8 @@ def crawl_website(base_url: str) -> Dict[str, object]:
             if any(hint in href_lower for hint in BOOKING_HINTS) and not booking_link:
                 booking_link = full_url
 
-            if (
-                any(key in href_lower for key in ["pricing", "investment", "plans"])
-                and not pricing_page
+            if any(key in href_lower for key in ["pricing", "investment", "plans"]) and (
+                not pricing_page or pricing_page == final_page_url
             ):
                 pricing_page = full_url
 
@@ -409,7 +413,7 @@ def crawl_website(base_url: str) -> Dict[str, object]:
     contact_name = _extract_contact_name(title, description)
 
     return {
-        "website": base_url,
+        "website": crawl_base_url,
         "website_title": title,
         "website_description": description,
         "contact_name": contact_name,
