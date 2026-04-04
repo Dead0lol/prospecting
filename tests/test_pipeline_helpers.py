@@ -44,24 +44,6 @@ def test_verify_leads_in_batch_marks_missing_and_applies_statuses(monkeypatch) -
     assert leads[1].verified_at
 
 
-def test_find_email_for_lead_uses_guesses_when_website_exists(monkeypatch) -> None:
-    lead = Lead(
-        business_name="Alex Coach",
-        contact_name="Alex Carter",
-        website="https://coach.example.com",
-    )
-    monkeypatch.setattr(
-        pipeline,
-        "guess_emails",
-        lambda name, domain: ["hello@coach.example.com"],
-    )
-
-    pipeline.find_email_for_lead(lead)
-
-    assert lead.email == "hello@coach.example.com"
-    assert lead.email_source == "guessed"
-
-
 def test_find_website_for_ig_lead_uses_individual_query_search(monkeypatch) -> None:
     lead = Lead(
         contact_name="Alex Carter",

@@ -24,8 +24,8 @@ The `Lead` dataclass is the central data structure, representing a single prospe
 | `business_name`    | `str` | `""`       | Coach's business or brand name                       |
 | `contact_name`     | `str` | `""`       | Person's actual name (extracted from site title/IG)   |
 | `email`            | `str` | `""`       | Contact email address                                |
-| `email_status`     | `str` | `"unknown"`| `valid` / `invalid` / `catch-all` / `unknown` / `missing` |
-| `email_source`     | `str` | `""`       | How email was found: `website` / `guessed` / `link_hub` |
+| `email_status`     | `str` | `"unknown"`| `valid` / `invalid` / `catch-all` / `risky` / `disposable` / `missing` |
+| `email_source`     | `str` | `""`       | How email was found: `website` / `link_hub`          |
 | `phone`            | `str` | `""`       | Phone number (US format)                             |
 
 ### Online Presence

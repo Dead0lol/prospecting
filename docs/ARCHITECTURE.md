@@ -98,14 +98,15 @@ prospecting/
 │   ├── __init__.py
 │   ├── website_crawler.py         # Website content extraction (275 lines)
 │   ├── email_extractor.py         # Regex email finding (31 lines)
-│   ├── email_guesser.py           # Email pattern generation (69 lines)
 │   └── linktree_parser.py         # Link hub page parsing (26 lines)
 ├── enrichment/
 │   ├── __init__.py
 │   └── ai_classifier.py           # OpenRouter/heuristic classification
 ├── verification/
 │   ├── __init__.py
-│   ├── smtp_verifier.py           # Email SMTP validation (182 lines)
+│   ├── email_verifier.py          # Unified Disify + SMTP verification
+│   ├── disify_client.py           # Disify API for domain validation
+│   ├── smtp_verifier.py           # Low-level SMTP probe (legacy)
 │   └── deduplicator.py            # Lead deduplication engine (127 lines)
 ├── scoring/
 │   ├── __init__.py
@@ -129,7 +130,8 @@ prospecting/
 └── .cache/
     ├── discovery_state.json       # Query rotation offset
     ├── ui_state.json              # Streamlit UI persistence
-    ├── smtp/                      # Cached SMTP results (per-email JSON)
+    ├── email_verification/        # Cached email verification results
+    ├── disify/                    # Cached Disify API responses
     └── runs/                      # Pipeline checkpoint files
 ```
 

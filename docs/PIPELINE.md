@@ -73,7 +73,7 @@ Run N: wraps around to start
 ## Phase 3: Enrichment
 
 **Functions:** `process_website_candidate()`, `process_instagram_candidate()` (lines 716-807)
-**Modules:** `extraction/website_crawler.py`, `extraction/email_extractor.py`, `extraction/email_guesser.py`, `extraction/linktree_parser.py`
+**Modules:** `extraction/website_crawler.py`, `extraction/email_extractor.py`, `extraction/linktree_parser.py`
 
 ### Website candidates (processed first, higher quality):
 
@@ -91,7 +91,6 @@ Run N: wraps around to start
    - Online coaching signals
    - Contact name extraction from title/meta description
 4. `_has_coach_signals()` rejects sites with fewer than 2 coaching indicators
-5. `find_email_for_lead()` generates email guesses if none found on-site
 
 ### Instagram candidates (fill remaining slots):
 
@@ -116,27 +115,29 @@ Website candidates first (limit * 3 max attempts)
 ## Phase 4: Verification
 
 **Function:** `verify_leads_in_batch()` (line 398)
-**Module:** `verification/smtp_verifier.py`
+**Modules:** `verification/email_verifier.py`, `verification/disify_client.py`
 
 ### What happens:
 
 1. Separates leads with emails from those without (mark as "missing")
-2. Runs parallel SMTP verification using `ThreadPoolExecutor` (5 workers)
+2. Runs parallel verification using `ThreadPoolExecutor` (5 workers)
 3. For each email:
-   - Check disk cache first (`.cache/smtp/{md5hash}.json`)
-   - MX record lookup via `dns.resolver`
-   - SMTP RCPT TO check against the mail server
+   - Check disk cache first (`.cache/email_verification/{hash}.json`)
+   - **Disify API** (domain-level): format, MX records, disposable check
+   - If domain invalid/disposable → skip SMTP, return early
+   - **SMTP probe** (mailbox-level): RCPT TO check against mail server
    - Catch-all domain detection (tests if domain accepts random addresses)
 4. Results cached to disk for future runs
 
 ### Email status values:
-| Status     | Meaning                                    |
-|------------|--------------------------------------------|
-| `valid`    | Mailbox exists and accepts mail             |
-| `invalid`  | Mailbox rejected (550/551/553) or no MX     |
-| `catch-all`| Domain accepts all addresses indiscriminately|
-| `unknown`  | Server didn't respond or gave ambiguous code |
-| `missing`  | No email was found for this lead            |
+| Status       | Meaning                                          |
+|--------------|--------------------------------------------------|
+| `valid`      | Mailbox exists and accepts mail                  |
+| `invalid`    | Mailbox rejected (550/551/553) or no MX          |
+| `catch-all`  | Domain accepts all addresses indiscriminately    |
+| `risky`      | Domain OK but SMTP inconclusive (blocked/timeout)|
+| `disposable` | Disposable email domain detected                 |
+| `missing`    | No email was found for this lead                 |
 
 ---
 

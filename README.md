@@ -236,13 +236,14 @@ prospecting/
 ├── extraction/
 │   ├── website_crawler.py      # Website content extraction
 │   ├── email_extractor.py     # Regex email finding
-│   ├── email_guesser.py        # Email pattern generation
 │   └── linktree_parser.py      # Link hub page parsing
 ├── enrichment/
 │   └── ai_classifier.py       # OpenRouter or heuristic classification
 ├── verification/
-│   ├── smtp_verifier.py        # Email SMTP validation
-│   └── deduplicator.py         # Lead deduplication
+│   ├── email_verifier.py      # Unified Disify + SMTP verification
+│   ├── disify_client.py       # Disify API for domain validation
+│   ├── smtp_verifier.py       # Low-level SMTP probe (legacy)
+│   └── deduplicator.py        # Lead deduplication
 ├── scoring/
 │   └── lead_scorer.py         # 0–100 heuristic scoring
 ├── export/
@@ -252,7 +253,8 @@ prospecting/
 ├── .env                       # Credentials (NOT committed)
 ├── .env.example               # Template
 ├── .cache/
-│   ├── smtp/                  # Cached SMTP verification results
+│   ├── email_verification/    # Cached email verification results
+│   ├── disify/                # Cached Disify API responses
 │   └── runs/                  # Checkpoint files from each run
 ├── service_account.json.json  # Google service account key
 └── requirements.txt
@@ -264,9 +266,8 @@ prospecting/
 
 - **Instagram data** — IG data is extracted from DuckDuckGo snippets instead of direct Instagram scraping. Follower counts are often unavailable.
 - **Single-query stability** — coach-specific website lookups use DuckDuckGo with retry logic; results may occasionally be inconsistent.
-- **SMTP verification** — some mail servers are slow or silently reject checks, resulting in "unknown" status. The cache mitigates this.
+- **SMTP verification** — some mail servers block verification probes, resulting in "risky" status. Disify provides domain-level validation as a fallback.
 - **JavaScript sites** — website crawler uses raw HTML (no JS rendering). SPA sites may not crawl well.
-- **Email guessing** — generates plausible patterns but doesn't verify them until the batch SMTP step.
 - **No resume mode** — interrupted runs restart from scratch. Use checkpoint files in `.cache/runs/` to manually recover.
 
 ---
@@ -278,10 +279,11 @@ prospecting/
 - DuckDuckGo may be rate-limiting — increase `DISCOVERY_DELAY_SECONDS`
 - Your IP may be temporarily blocked by DuckDuckGo — wait and retry
 
-**All emails show "unknown" status**
-- The domain's mail server may be slow to respond
-- Check `.cache/smtp/` for individual verification results
-- Free SMTP verification is inherently unreliable — consider a paid service for production
+**All emails show "risky" or "invalid" status**
+- Many mail servers block SMTP verification probes
+- Check `.cache/email_verification/` for individual results
+- Disify provides domain-level validation (format, MX, disposable) even when SMTP fails
+- "risky" means domain is valid but mailbox couldn't be confirmed
 
 **Pipeline finds the same leads repeatedly**
 - This should be fixed by seen-lead suppression

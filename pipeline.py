@@ -33,7 +33,7 @@ from discovery.web_search import (
 from enrichment.ai_classifier import classify_lead
 from export.sheets_writer import SheetsWriter
 from extraction.email_extractor import pick_best_email
-from extraction.email_guesser import guess_emails
+
 from extraction.linktree_parser import parse_link_hub
 from extraction.website_crawler import crawl_website
 from logging_utils import get_logger
@@ -46,7 +46,7 @@ from verification.seen_tracker import (
     load_seen_identities,
     remember_lead_identities,
 )
-from verification.smtp_verifier import verify_email_address, verify_emails_batch
+from verification.email_verifier import verify_email_address, verify_emails_batch
 from utils import cast_dict, cast_int, cast_list
 
 
@@ -217,21 +217,6 @@ def enrich_lead_from_website(lead: Lead) -> None:
     except Exception as exc:
         lead.notes.append(f"crawl_error:{exc}")
         log(f"  Crawl failed: {exc}")
-
-
-def find_email_for_lead(lead: Lead) -> None:
-    """Try to find an email through guessing if none was found on the site."""
-    if lead.email or not lead.website:
-        return
-    domain = urlparse(lead.website).netloc.replace("www.", "")
-    if not domain:
-        return
-    log(f"  Guessing email for {domain}")
-    guessed = guess_emails(lead.contact_name or lead.business_name, domain)
-    if guessed:
-        lead.email = guessed[0]
-        lead.email_source = "guessed"
-        log(f"  Guessed: {lead.email}")
 
 
 def verify_lead_email(lead: Lead) -> None:
@@ -490,7 +475,6 @@ def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead
         return None
 
     enrich_lead_from_website(lead)
-    find_email_for_lead(lead)
     return lead
 
 
@@ -535,7 +519,6 @@ def process_website_candidate(candidate: Dict[str, str], country: str) -> Lead |
         log(f"  Rejected: no coach signals")
         return None
 
-    find_email_for_lead(lead)
     return lead
 
 

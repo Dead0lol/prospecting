@@ -144,26 +144,6 @@ Regex-based email extraction.
 
 ---
 
-### `extraction/email_guesser.py` (69 lines)
-
-Email pattern generation for leads without discovered emails.
-
-| Function         | Description                                             |
-|------------------|---------------------------------------------------------|
-| `guess_emails()` | Generates up to 3 email guesses from name + domain      |
-
-**Guess patterns (in order):**
-1. `{first}@domain` (if name found)
-2. `{first}.{last}@domain` (if full name found)
-3. `{first}{last}@domain` (if full name found)
-4. `hello@domain` (always)
-5. `info@domain` (always)
-6. `contact@domain` (always)
-
-Returns top 3 unique guesses.
-
----
-
 ### `extraction/linktree_parser.py` (26 lines)
 
 Link hub page parser for Linktree, Beacons, Stan Store.
@@ -202,31 +182,61 @@ AI and heuristic lead classification.
 
 ## `verification/` - Email Verification & Deduplication
 
-### `verification/smtp_verifier.py` (182 lines)
+### `verification/disify_client.py`
 
-Email deliverability verification via SMTP.
+Free Disify API client for domain-level email validation.
 
-**Key functions:**
+| Function                  | Description                                           |
+|---------------------------|-------------------------------------------------------|
+| `validate_email_domain()` | Validates email format, MX records, disposable status |
+| `validate_emails_batch()` | Sequential validation with caching                    |
+
+**Checks performed:**
+- Email format validity
+- Domain has MX records
+- Disposable email domain detection
+- Role account detection (info@, admin@, etc.)
+- Free email provider detection
+
+---
+
+### `verification/email_verifier.py`
+
+Unified email verification combining Disify (domain) + SMTP (mailbox).
+
+| Function                 | Description                                           |
+|--------------------------|-------------------------------------------------------|
+| `verify_email()`         | Full verification returning VerificationResult object |
+| `verify_email_address()` | Backward-compatible wrapper returning status string   |
+| `verify_emails_batch()`  | Parallel verification with ThreadPoolExecutor         |
+
+**Verification flow:**
+1. Check disk cache (`.cache/email_verification/{hash}.json`)
+2. Disify API: format, MX, disposable check
+3. If domain invalid/disposable → skip SMTP, return early
+4. SMTP RCPT TO probe (best effort)
+5. If 250 response: check if domain is catch-all
+6. Cache result to disk
+
+**Status codes:**
+- `valid` - SMTP confirmed mailbox exists
+- `invalid` - Domain invalid OR SMTP rejected (550/551/552/553/554)
+- `catch-all` - Domain accepts all addresses
+- `risky` - Domain OK but SMTP inconclusive (timeout, blocked, etc.)
+- `disposable` - Disposable email domain detected
+- `missing` - No email provided
+
+---
+
+### `verification/smtp_verifier.py`
+
+Low-level SMTP verification (used internally by email_verifier).
 
 | Function                 | Description                                        |
 |--------------------------|----------------------------------------------------|
-| `verify_email_address()` | Full verification: cache -> MX -> SMTP -> catch-all|
-| `verify_emails_batch()`  | Parallel verification with ThreadPoolExecutor      |
+| `verify_email_address()` | Direct SMTP verification (legacy)                  |
+| `verify_emails_batch()`  | Parallel verification (legacy)                     |
 | `is_catch_all_domain()`  | Detects domains accepting all addresses            |
-
-**Verification flow:**
-1. Check disk cache (`.cache/smtp/{md5}.json`)
-2. MX record lookup via `dns.resolver`
-3. SMTP RCPT TO check (connect, HELO, MAIL FROM, RCPT TO)
-4. If 250 response: check if domain is catch-all
-5. Cache result to disk
-
-**Status codes:**
-- SMTP 250 + not catch-all = `valid`
-- SMTP 250 + catch-all = `catch-all`
-- SMTP 550/551/553 = `invalid`
-- No MX records = `invalid`
-- Any exception = `unknown`
 
 ---
 
