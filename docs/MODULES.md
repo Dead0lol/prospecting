@@ -14,7 +14,6 @@ Central settings management using a Python dataclass.
 - `settings` - Singleton `Settings` instance, created at import time
 
 **Functions:**
-- `_split_csv(value, default)` - Parses comma-separated string into list
 - `_get_bool(value, default)` - Parses boolean from string ("1", "true", "yes", "on")
 
 **Notes:**
@@ -34,12 +33,6 @@ Discovery keyword definitions organized by ICP conversion priority.
 - `COACH_PLATFORM_DOMAINS` - 9 accepted coach platform domains
 - `COACH_DIRECTORY_DOMAINS` - 4 accepted directory domains
 - Individual tier lists: `DIGITAL_SELLER_KEYWORDS`, `ONLINE_COACH_KEYWORDS`, `TRANSFORMATION_KEYWORDS`, `NICHE_COACH_KEYWORDS`, `BUSINESS_COACH_KEYWORDS`
-
----
-
-### `config/cities.py` (13 lines)
-
-**DEPRECATED.** Contains only `US_TARGET_CITIES = []`. Not imported or used anywhere.
 
 ---
 
@@ -63,6 +56,21 @@ DuckDuckGo search integration using the `ddgs` library.
 - `_log()` - Timestamped logging
 
 **Retry strategy:** For each query, tries `us-en` region first, then `wt-wt` (worldwide). For Instagram queries, also tries rearranged `site:` prefix position.
+
+---
+
+### `discovery/individual_search.py`
+
+Single-query website lookup routing for Instagram follow-up searches.
+
+**Key functions:**
+
+| Function                  | Signature                                        | Description                                       |
+|---------------------------|--------------------------------------------------|---------------------------------------------------|
+| `search_individual_query()` | `(query, max_results=None) -> List[Dict]`      | Uses DuckDuckGo with enhanced retry logic |
+
+**Internal functions:**
+- None (simple wrapper around DDG search)
 
 ---
 
@@ -122,7 +130,7 @@ Website content extraction via Scrapling fetchers and selectors.
 
 ---
 
-### `extraction/email_extractor.py` (31 lines)
+### `extraction/email_extractor.py`
 
 Regex-based email extraction.
 
@@ -132,26 +140,7 @@ Regex-based email extraction.
 | `pick_best_email()`| Prioritizes domain-matching emails, then common prefixes      |
 
 **Priority order for `pick_best_email()`:** hello@ > contact@ > info@ > coach@ > admin@
-
----
-
-### `extraction/email_guesser.py` (69 lines)
-
-Email pattern generation for leads without discovered emails.
-
-| Function         | Description                                             |
-|------------------|---------------------------------------------------------|
-| `guess_emails()` | Generates up to 3 email guesses from name + domain      |
-
-**Guess patterns (in order):**
-1. `{first}@domain` (if name found)
-2. `{first}.{last}@domain` (if full name found)
-3. `{first}{last}@domain` (if full name found)
-4. `hello@domain` (always)
-5. `info@domain` (always)
-6. `contact@domain` (always)
-
-Returns top 3 unique guesses.
+**Filtering notes:** rejects common placeholder addresses plus vendor telemetry mailboxes such as Wix/Sentry-style service emails.
 
 ---
 
@@ -167,17 +156,17 @@ Link hub page parser for Linktree, Beacons, Stan Store.
 
 ## `enrichment/` - Classification
 
-### `enrichment/gemini_classifier.py` (140 lines)
+### `enrichment/ai_classifier.py`
 
 AI and heuristic lead classification.
 
 | Function              | Description                                              |
 |-----------------------|----------------------------------------------------------|
-| `classify_lead()`     | Dispatches to Gemini AI or heuristic based on settings   |
+| `classify_lead()`     | Dispatches to OpenRouter or heuristic based on settings  |
 | `heuristic_classify()`| Keyword-based classification (default mode)              |
 
-**Gemini mode:**
-- Sends structured prompt with lead data to `gemini-2.0-flash`
+**OpenRouter mode:**
+- Sends chat-completions requests through OpenRouter
 - Expects JSON response with 9 classification fields
 - Falls back to heuristic on any error
 
@@ -193,31 +182,61 @@ AI and heuristic lead classification.
 
 ## `verification/` - Email Verification & Deduplication
 
-### `verification/smtp_verifier.py` (182 lines)
+### `verification/disify_client.py`
 
-Email deliverability verification via SMTP.
+Free Disify API client for domain-level email validation.
 
-**Key functions:**
+| Function                  | Description                                           |
+|---------------------------|-------------------------------------------------------|
+| `validate_email_domain()` | Validates email format, MX records, disposable status |
+| `validate_emails_batch()` | Sequential validation with caching                    |
+
+**Checks performed:**
+- Email format validity
+- Domain has MX records
+- Disposable email domain detection
+- Role account detection (info@, admin@, etc.)
+- Free email provider detection
+
+---
+
+### `verification/email_verifier.py`
+
+Unified email verification combining Disify (domain) + SMTP (mailbox).
+
+| Function                 | Description                                           |
+|--------------------------|-------------------------------------------------------|
+| `verify_email()`         | Full verification returning VerificationResult object |
+| `verify_email_address()` | Backward-compatible wrapper returning status string   |
+| `verify_emails_batch()`  | Parallel verification with ThreadPoolExecutor         |
+
+**Verification flow:**
+1. Check disk cache (`.cache/email_verification/{hash}.json`)
+2. Disify API: format, MX, disposable check
+3. If domain invalid/disposable → skip SMTP, return early
+4. SMTP RCPT TO probe (best effort)
+5. If 250 response: check if domain is catch-all
+6. Cache result to disk
+
+**Status codes:**
+- `valid` - SMTP confirmed mailbox exists
+- `invalid` - Domain invalid OR SMTP rejected (550/551/552/553/554)
+- `catch-all` - Domain accepts all addresses
+- `risky` - Domain OK but SMTP inconclusive (timeout, blocked, etc.)
+- `disposable` - Disposable email domain detected
+- `missing` - No email provided
+
+---
+
+### `verification/smtp_verifier.py`
+
+Low-level SMTP verification (used internally by email_verifier).
 
 | Function                 | Description                                        |
 |--------------------------|----------------------------------------------------|
-| `verify_email_address()` | Full verification: cache -> MX -> SMTP -> catch-all|
-| `verify_emails_batch()`  | Parallel verification with ThreadPoolExecutor      |
+| `verify_email_address()` | Direct SMTP verification (legacy)                  |
+| `verify_emails_batch()`  | Parallel verification (legacy)                     |
 | `is_catch_all_domain()`  | Detects domains accepting all addresses            |
-
-**Verification flow:**
-1. Check disk cache (`.cache/smtp/{md5}.json`)
-2. MX record lookup via `dns.resolver`
-3. SMTP RCPT TO check (connect, HELO, MAIL FROM, RCPT TO)
-4. If 250 response: check if domain is catch-all
-5. Cache result to disk
-
-**Status codes:**
-- SMTP 250 + not catch-all = `valid`
-- SMTP 250 + catch-all = `catch-all`
-- SMTP 550/551/553 = `invalid`
-- No MX records = `invalid`
-- Any exception = `unknown`
 
 ---
 
@@ -284,15 +303,11 @@ See [DATA_MODEL.md](DATA_MODEL.md) for complete field reference.
 
 ### `resolution/instagram_profile.py` (61 lines)
 
-Instagram profile handling. **Note:** `fetch_profile()` is dead code - blocked by Instagram.
+Instagram URL normalization.
 
 | Function               | Description                                           |
 |------------------------|-------------------------------------------------------|
-| `normalize_username()` | Extracts IG username from URL or handle (ACTIVE)      |
-| `fetch_profile()`      | Instaloader profile fetch (DEAD CODE - blocked by IG) |
-| `get_loader()`         | Lazy Instaloader initialization (DEAD CODE)           |
-
-Only `normalize_username()` is actively used by the pipeline.
+| `normalize_username()` | Extracts IG username from URL or handle               |
 
 ---
 

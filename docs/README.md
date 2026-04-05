@@ -49,13 +49,10 @@ An automated B2B lead generation tool that discovers English-speaking fitness co
 
 ## Code Review Summary
 
-The [Code Review](CODE_REVIEW.md) identified **44 issues**:
+The [Code Review](CODE_REVIEW.md) is a historical snapshot, not a live
+status page. Some findings there have since been addressed, including
+test coverage and dependency completeness.
 
-| Severity | Count | Top Issues |
-|----------|-------|------------|
-| Critical | 5 | Broken UI tabs, unreachable code, exposed credentials, incomplete requirements.txt, zero tests |
-| Major | 17 | God module (980 lines), contradictory domain lists, unused dead code, missing follower regex for "M" suffix |
-| Minor | 15 | Redundant imports, inconsistent logging, magic numbers in scoring, unused settings |
-| Info | 7 | Missing docstrings, artifact files, export field gaps |
-
-See [CODE_REVIEW.md](CODE_REVIEW.md) for the full findings and prioritized remediation plan.
+Use it as background on technical debt themes and architectural risks,
+but verify the current code and test suite before assuming every listed
+issue is still open.

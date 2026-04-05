@@ -12,9 +12,8 @@ All settings are managed through the `Settings` dataclass in `config/settings.py
 
 | Variable                       | Required | Default                      | Description                          |
 |--------------------------------|----------|------------------------------|--------------------------------------|
-| `GEMINI_API_KEY`               | No       | `""`                         | Google Gemini API key for AI classification |
-| `IG_USERNAME`                  | No       | `""`                         | Instagram username (currently unused) |
-| `IG_PASSWORD`                  | No       | `""`                         | Instagram password (currently unused) |
+| `OPENROUTER_API_KEY`           | No       | `""`                         | OpenRouter API key for AI classification |
+| `OPENROUTER_MODEL`             | No       | `openai/gpt-4o-mini`         | OpenRouter model for AI classification |
 | `GOOGLE_SERVICE_ACCOUNT_FILE`  | Yes      | `service_account.json.json`  | Path to Google Cloud service account key |
 | `GOOGLE_SHEET_NAME`            | Yes      | `Fitness Coach Leads`        | Name of the Google Spreadsheet       |
 
@@ -22,17 +21,15 @@ All settings are managed through the `Settings` dataclass in `config/settings.py
 
 | Variable     | Required | Default | Description                              |
 |--------------|----------|---------|------------------------------------------|
-| `ENABLE_AI`  | No       | `false` | Enable Gemini AI classification. When false, uses heuristic-only mode (faster, no API cost). |
+| `ENABLE_AI`  | No       | `false` | Enable OpenRouter AI classification. When false, uses heuristic-only mode (faster, no API cost). |
 
 ### Rate Limiting
 
 | Variable                      | Default | Description                                          |
 |-------------------------------|---------|------------------------------------------------------|
 | `DISCOVERY_DELAY_SECONDS`     | `3`     | Delay between DuckDuckGo queries                     |
-| `INSTAGRAM_DELAY_SECONDS`     | `4`     | Delay between Instagram API calls (unused)            |
 | `WEBSITE_DELAY_SECONDS`       | `2`     | Delay between website page fetches                   |
-| `SMTP_DELAY_SECONDS`          | `3`     | Delay between SMTP verification attempts              |
-| `GEMINI_DELAY_SECONDS`        | `4`     | Delay between Gemini API calls                       |
+| `OPENROUTER_DELAY_SECONDS`   | `4`     | Delay between OpenRouter API calls                   |
 
 ### Discovery Settings
 
@@ -42,7 +39,6 @@ All settings are managed through the `Settings` dataclass in `config/settings.py
 | `MAX_SEARCH_RESULTS_PER_QUERY` | `20`    | Maximum results pulled from each DDG query        |
 | `DDGS_TIMEOUT_SECONDS`         | `15`    | Timeout for each DDG search request               |
 | `TARGET_COUNTRY`               | `US`    | Default country code (mostly cosmetic)            |
-| `TARGET_CITIES`                | `""`    | DEPRECATED - not used                             |
 
 ### Crawling Settings
 
@@ -50,7 +46,6 @@ All settings are managed through the `Settings` dataclass in `config/settings.py
 |---------------------------|---------|-------------------------------------------------|
 | `MAX_PAGES_PER_SITE`      | `5`     | Maximum pages crawled per website                |
 | `REQUEST_TIMEOUT_SECONDS`  | `20`    | HTTP request timeout for crawling                |
-| `PROFILE_BATCH_SIZE`       | `50`    | Batch size for profile processing (unused)       |
 | `USER_AGENT`               | Chrome 124 | Browser user-agent string for HTTP requests   |
 
 ### Scoring Thresholds
@@ -70,20 +65,15 @@ All settings are managed through the `Settings` dataclass in `config/settings.py
 @dataclass(slots=True)
 class Settings:
     root: Path                          # Project root directory
-    gemini_api_key: str                 # Gemini API key
+    openrouter_api_key: str             # OpenRouter API key
+    openrouter_model: str               # OpenRouter model name
     enable_ai: bool                     # AI classification toggle
-    ig_username: str                    # Instagram username
-    ig_password: str                    # Instagram password
     google_sheet_name: str              # Google Sheet name
     google_service_account_file: Path   # Service account JSON path
     target_country: str                 # Default country code
-    target_cities: List[str]            # DEPRECATED
     discovery_delay_seconds: float      # DDG query delay
-    instagram_delay_seconds: float      # IG API delay (unused)
     website_delay_seconds: float        # Page crawl delay
-    smtp_delay_seconds: float           # SMTP check delay
-    gemini_delay_seconds: float         # Gemini API delay
-    profile_batch_size: int             # Batch size (unused)
+    openrouter_delay_seconds: float     # OpenRouter API delay
     request_timeout_seconds: int        # HTTP timeout
     max_search_results_per_query: int   # DDG results per query
     ddgs_timeout_seconds: int           # DDG search timeout
@@ -178,20 +168,15 @@ These values are not configurable via `.env` and require code changes:
 ## .env.example Template
 
 ```env
-GEMINI_API_KEY=
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openai/gpt-4o-mini
 ENABLE_AI=false
-IG_USERNAME=
-IG_PASSWORD=
 GOOGLE_SHEET_NAME=Fitness Coach Leads
 GOOGLE_SERVICE_ACCOUNT_FILE=service_account.json.json
 TARGET_COUNTRY=US
-TARGET_CITIES=
 DISCOVERY_DELAY_SECONDS=3
-INSTAGRAM_DELAY_SECONDS=4
 WEBSITE_DELAY_SECONDS=2
-SMTP_DELAY_SECONDS=3
-GEMINI_DELAY_SECONDS=4
-PROFILE_BATCH_SIZE=50
+OPENROUTER_DELAY_SECONDS=4
 REQUEST_TIMEOUT_SECONDS=20
 MAX_SEARCH_RESULTS_PER_QUERY=20
 MAX_PAGES_PER_SITE=5

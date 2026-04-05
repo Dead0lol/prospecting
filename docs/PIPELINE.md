@@ -73,7 +73,7 @@ Run N: wraps around to start
 ## Phase 3: Enrichment
 
 **Functions:** `process_website_candidate()`, `process_instagram_candidate()` (lines 716-807)
-**Modules:** `extraction/website_crawler.py`, `extraction/email_extractor.py`, `extraction/email_guesser.py`, `extraction/linktree_parser.py`
+**Modules:** `extraction/website_crawler.py`, `extraction/email_extractor.py`, `extraction/linktree_parser.py`
 
 ### Website candidates (processed first, higher quality):
 
@@ -91,14 +91,14 @@ Run N: wraps around to start
    - Online coaching signals
    - Contact name extraction from title/meta description
 4. `_has_coach_signals()` rejects sites with fewer than 2 coaching indicators
-5. `find_email_for_lead()` generates email guesses if none found on-site
 
 ### Instagram candidates (fill remaining slots):
 
-1. `_parse_ig_snippet()` extracts name, followers, bio from the DuckDuckGo search result text (no Instaloader API call)
-2. `_find_website_for_ig_lead()` runs a secondary DDG search to find the coach's website, with relevance validation
-3. IG-only leads without a discoverable website are **dropped** (they score 16-24, considered useless for cold email)
-4. Same website crawl and email extraction as above
+1. `_parse_ig_snippet()` extracts name, followers, bio from the DuckDuckGo search result text (no direct Instagram API call)
+2. `_find_website_for_ig_lead()` runs a targeted follow-up search to find the coach's website, with relevance validation
+3. That single-query path uses DuckDuckGo with enhanced retry logic for reliability
+4. IG-only leads without a discoverable website are **dropped** (they score 16-24, considered useless for cold email)
+5. Same website crawl and email extraction as above
 
 ### Processing order:
 ```
@@ -115,34 +115,36 @@ Website candidates first (limit * 3 max attempts)
 ## Phase 4: Verification
 
 **Function:** `verify_leads_in_batch()` (line 398)
-**Module:** `verification/smtp_verifier.py`
+**Modules:** `verification/email_verifier.py`, `verification/disify_client.py`
 
 ### What happens:
 
 1. Separates leads with emails from those without (mark as "missing")
-2. Runs parallel SMTP verification using `ThreadPoolExecutor` (5 workers)
+2. Runs parallel verification using `ThreadPoolExecutor` (5 workers)
 3. For each email:
-   - Check disk cache first (`.cache/smtp/{md5hash}.json`)
-   - MX record lookup via `dns.resolver`
-   - SMTP RCPT TO check against the mail server
+   - Check disk cache first (`.cache/email_verification/{hash}.json`)
+   - **Disify API** (domain-level): format, MX records, disposable check
+   - If domain invalid/disposable → skip SMTP, return early
+   - **SMTP probe** (mailbox-level): RCPT TO check against mail server
    - Catch-all domain detection (tests if domain accepts random addresses)
 4. Results cached to disk for future runs
 
 ### Email status values:
-| Status     | Meaning                                    |
-|------------|--------------------------------------------|
-| `valid`    | Mailbox exists and accepts mail             |
-| `invalid`  | Mailbox rejected (550/551/553) or no MX     |
-| `catch-all`| Domain accepts all addresses indiscriminately|
-| `unknown`  | Server didn't respond or gave ambiguous code |
-| `missing`  | No email was found for this lead            |
+| Status       | Meaning                                          |
+|--------------|--------------------------------------------------|
+| `valid`      | Mailbox exists and accepts mail                  |
+| `invalid`    | Mailbox rejected (550/551/553) or no MX          |
+| `catch-all`  | Domain accepts all addresses indiscriminately    |
+| `risky`      | Domain OK but SMTP inconclusive (blocked/timeout)|
+| `disposable` | Disposable email domain detected                 |
+| `missing`    | No email was found for this lead                 |
 
 ---
 
 ## Phase 5: Classification & Scoring
 
 **Functions:** `classify_and_score()` (line 416)
-**Modules:** `enrichment/gemini_classifier.py`, `scoring/lead_scorer.py`
+**Modules:** `enrichment/ai_classifier.py`, `scoring/lead_scorer.py`
 
 ### Classification:
 
@@ -156,8 +158,8 @@ Website candidates first (limit * 3 max attempts)
 - Identifies weakness for outreach angle
 - Generates outreach angle and personalization note
 
-**Gemini AI mode (optional, disabled by default):**
-- Sends structured prompt with lead data to `gemini-2.0-flash`
+**OpenRouter AI mode (optional, disabled by default):**
+- Sends structured prompt data through OpenRouter chat completions
 - Expects JSON response with classification fields
 - Falls back to heuristic on any error
 

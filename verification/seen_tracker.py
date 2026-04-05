@@ -67,12 +67,12 @@ def _load_seen_cache() -> SeenIdentityMap | None:
                 if str(item).strip()
             },
             "instagrams": {
-                str(item).strip().lower()
+                _canonical_instagram_username(str(item).strip())
                 for item in data.get("instagrams", [])
-                if str(item).strip()
+                if _canonical_instagram_username(str(item).strip())
             },
             "domains": {
-                str(item).strip().lower()
+                canonical_domain(str(item).strip()) or str(item).strip().lower()
                 for item in data.get("domains", [])
                 if str(item).strip()
             },

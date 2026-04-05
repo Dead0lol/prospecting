@@ -22,17 +22,19 @@ from config.keywords import (
     COACH_PLATFORM_DOMAINS,
 )
 from config.settings import settings
-from discovery.duckduckgo_search import build_queries, discover_candidates, search_query
+from discovery.duckduckgo_search import build_queries, discover_candidates
+from discovery.individual_search import search_individual_query
 from discovery.instagram_parser import is_likely_name, parse_ig_snippet
 from discovery.web_search import (
     quick_reject_website,
     rank_website_candidates,
     split_candidate_urls,
 )
-from enrichment.gemini_classifier import classify_lead
+from enrichment.ai_classifier import classify_lead
+from enrichment.icebreaker_generator import generate_icebreaker
 from export.sheets_writer import SheetsWriter
 from extraction.email_extractor import pick_best_email
-from extraction.email_guesser import guess_emails
+
 from extraction.linktree_parser import parse_link_hub
 from extraction.website_crawler import crawl_website
 from logging_utils import get_logger
@@ -45,7 +47,7 @@ from verification.seen_tracker import (
     load_seen_identities,
     remember_lead_identities,
 )
-from verification.smtp_verifier import verify_email_address, verify_emails_batch
+from verification.email_verifier import verify_email_address, verify_emails_batch
 from utils import cast_dict, cast_int, cast_list
 
 
@@ -218,21 +220,6 @@ def enrich_lead_from_website(lead: Lead) -> None:
         log(f"  Crawl failed: {exc}")
 
 
-def find_email_for_lead(lead: Lead) -> None:
-    """Try to find an email through guessing if none was found on the site."""
-    if lead.email or not lead.website:
-        return
-    domain = urlparse(lead.website).netloc.replace("www.", "")
-    if not domain:
-        return
-    log(f"  Guessing email for {domain}")
-    guessed = guess_emails(lead.contact_name or lead.business_name, domain)
-    if guessed:
-        lead.email = guessed[0]
-        lead.email_source = "guessed"
-        log(f"  Guessed: {lead.email}")
-
-
 def verify_lead_email(lead: Lead) -> None:
     """Verify the lead's email if present."""
     if not lead.email:
@@ -277,6 +264,14 @@ def classify_and_score(lead: Lead) -> None:
         lead.personalization_note = ai.get("personalization_note", "")
     except Exception as exc:
         lead.notes.append(f"classify_error:{exc}")
+
+    # Generate personalized icebreaker
+    try:
+        lead.ice_breaker = generate_icebreaker(lead)
+    except Exception as exc:
+        log(f"  Icebreaker generation failed: {exc}")
+        lead.ice_breaker = ""
+
     score_lead(lead)
     log(f"  Score: {lead.lead_score} ({lead.lead_tier}) icp={lead.ai_icp_match}")
 
@@ -345,7 +340,7 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
     for query in queries_to_try:
         log(f"  Searching for website: {query[:60]}")
         try:
-            results = search_query(query, max_results=5)
+            results = search_individual_query(query, max_results=5)
         except Exception as exc:
             log(f"  Website search failed: {exc}")
             continue
@@ -407,7 +402,7 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
     for query in hub_queries:
         log(f"  Searching link hubs: {query}")
         try:
-            results = search_query(query, max_results=3)
+            results = search_individual_query(query, max_results=3)
         except Exception:
             continue
 
@@ -448,8 +443,8 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
 def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead | None:
     """Process a single Instagram candidate into a Lead.
 
-    Uses DuckDuckGo snippet data (name, followers, bio) instead of Instaloader,
-    which is blocked by Instagram without valid login credentials.
+    Uses DuckDuckGo snippet data (name, followers, bio) instead of
+    direct Instagram scraping.
     """
     url = candidate["url"]
     log(f"IG: {url}")
@@ -489,7 +484,6 @@ def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead
         return None
 
     enrich_lead_from_website(lead)
-    find_email_for_lead(lead)
     return lead
 
 
@@ -534,7 +528,6 @@ def process_website_candidate(candidate: Dict[str, str], country: str) -> Lead |
         log(f"  Rejected: no coach signals")
         return None
 
-    find_email_for_lead(lead)
     return lead
 
 

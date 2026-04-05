@@ -40,6 +40,7 @@ class Lead:
     weakness: str = ""
     outreach_angle: str = ""
     personalization_note: str = ""
+    ice_breaker: str = ""
     source_url: str = ""
     source_type: str = ""
     source_query: str = ""
@@ -91,6 +92,7 @@ SHEET_COLUMNS = [
     "weakness",
     "outreach_angle",
     "personalization_note",
+    "ice_breaker",
     "phone",
     "linkedin_url",
     "youtube_url",

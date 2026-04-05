@@ -15,11 +15,11 @@ The Fitness Coach Prospecting Pipeline is an automated B2B lead generation syste
 | Language           | Python 3.12                         | Core runtime                                 |
 | Web UI             | Streamlit                           | Dashboard, lead browser, run controls        |
 | Data manipulation  | Pandas                              | DataFrames for UI tables/charts              |
-| Search engine      | DuckDuckGo (`ddgs` / ddgstealth)    | Primary discovery source                     |
+| Search engine      | DuckDuckGo (`ddgs`)                 | Bulk discovery and one-off coach-site lookups |
 | Web scraping       | Scrapling                           | Website crawling and HTML parsing            |
 | Email verification | Raw SMTP (`smtplib`) + DNS (`dnspython`) | Mailbox existence checks               |
-| AI classification  | Google Gemini 2.0 Flash (optional)  | Lead classification (disabled by default)    |
-| Instagram          | Instaloader (blocked, unused)       | IG data now parsed from DDG snippets         |
+| AI classification  | OpenRouter chat completions (optional) | Lead classification (disabled by default) |
+| Instagram          | URL normalization + DDG snippets    | IG data now parsed from DDG snippets         |
 | Google Sheets      | `gspread` + Service Account auth    | Lead export and deduplication store          |
 | Config             | `python-dotenv` + `dataclasses`     | Environment-based settings                   |
 | Concurrency        | `concurrent.futures.ThreadPoolExecutor` | Parallel SMTP verification             |
@@ -92,19 +92,21 @@ prospecting/
 ├── discovery/
 │   ├── __init__.py
 │   ├── duckduckgo_search.py       # DDG search + query builder (171 lines)
+│   ├── individual_search.py       # Single-query website lookup routing
 │   └── web_search.py              # URL classification/filtering (155 lines)
 ├── extraction/
 │   ├── __init__.py
 │   ├── website_crawler.py         # Website content extraction (275 lines)
 │   ├── email_extractor.py         # Regex email finding (31 lines)
-│   ├── email_guesser.py           # Email pattern generation (69 lines)
 │   └── linktree_parser.py         # Link hub page parsing (26 lines)
 ├── enrichment/
 │   ├── __init__.py
-│   └── gemini_classifier.py       # AI/heuristic classification (140 lines)
+│   └── ai_classifier.py           # OpenRouter/heuristic classification
 ├── verification/
 │   ├── __init__.py
-│   ├── smtp_verifier.py           # Email SMTP validation (182 lines)
+│   ├── email_verifier.py          # Unified Disify + SMTP verification
+│   ├── disify_client.py           # Disify API for domain validation
+│   ├── smtp_verifier.py           # Low-level SMTP probe (legacy)
 │   └── deduplicator.py            # Lead deduplication engine (127 lines)
 ├── scoring/
 │   ├── __init__.py
@@ -117,7 +119,7 @@ prospecting/
 │   └── lead.py                    # Lead dataclass - 44 fields (114 lines)
 ├── resolution/
 │   ├── __init__.py
-│   ├── instagram_profile.py       # IG profile fetcher - BLOCKED (61 lines)
+│   ├── instagram_profile.py       # Instagram username normalization
 │   └── link_resolver.py           # External URL resolver (41 lines)
 ├── .env                           # Live credentials (git-ignored)
 ├── .env.example                   # Credential template
@@ -128,11 +130,12 @@ prospecting/
 └── .cache/
     ├── discovery_state.json       # Query rotation offset
     ├── ui_state.json              # Streamlit UI persistence
-    ├── smtp/                      # Cached SMTP results (per-email JSON)
+    ├── email_verification/        # Cached email verification results
+    ├── disify/                    # Cached Disify API responses
     └── runs/                      # Pipeline checkpoint files
 ```
 
-**Total source files:** 20 Python files (excluding `__init__.py`)
+**Total source files:** 21 Python files (excluding `__init__.py`)
 **Total lines of code:** ~3,108 lines
 
 ---
@@ -180,8 +183,7 @@ The UI spawns `pipeline.py` as a subprocess when the user clicks "Run Pipeline".
 | Google Sheets API    | Yes      | Lead storage and dedup source  |
 | Target websites      | Yes      | Crawled for contact data       |
 | Target mail servers  | Yes      | SMTP verification              |
-| Google Gemini API    | No       | Optional AI classification     |
-| Instagram API        | No       | Blocked; DDG snippets used     |
+| OpenRouter API       | No       | Optional AI classification     |
 
 ---
 

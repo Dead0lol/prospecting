@@ -22,8 +22,3 @@ pytest
 # Google Sheets Integration
 gspread
 
-# Instagram Scraping
-instaloader
-
-# AI/ML (Optional - for Gemini classifier)
-google-generativeai

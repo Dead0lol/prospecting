@@ -13,8 +13,12 @@ def score_lead(lead: Lead) -> Lead:
         score += 20
     elif lead.email_status == "catch-all":
         score += 12
+    elif lead.email_status == "risky" and lead.email:
+        score += 8  # domain OK but SMTP inconclusive - still useful
     elif lead.email_status == "unknown" and lead.email:
         score += 8  # we have an email but couldn't verify - still useful
+    elif lead.email_status == "disposable":
+        score -= 10  # disposable emails are low quality
     elif not lead.email:
         score -= 15
 

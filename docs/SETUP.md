@@ -19,13 +19,13 @@ cd prospecting
 
 ## 2. Install Dependencies
 
-The `requirements.txt` is **incomplete** - it only lists `streamlit` and `pandas`. Install all actual dependencies:
+Install the project dependencies:
 
 ```bash
-pip install streamlit pandas ddgs "scrapling[fetchers]" gspread dnspython instaloader python-dotenv google-generativeai
+pip install -r requirements.txt
 ```
 
-Or use the corrected requirements (see [CODE_REVIEW.md](CODE_REVIEW.md) for the recommended fix):
+The current `requirements.txt` includes:
 
 ```
 streamlit
@@ -34,9 +34,8 @@ ddgs
 scrapling[fetchers]
 gspread
 dnspython
-instaloader
 python-dotenv
-google-generativeai
+pytest
 ```
 
 ---
@@ -58,18 +57,15 @@ GOOGLE_SERVICE_ACCOUNT_FILE=service_account.json.json
 
 # AI Classification (OPTIONAL - leave false for faster heuristic-only runs)
 ENABLE_AI=false
-GEMINI_API_KEY=
-
-# Instagram (CURRENTLY UNUSED - Instaloader blocked by IG)
-IG_USERNAME=
-IG_PASSWORD=
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openai/gpt-4o-mini
 
 # Rate Limiting
 DISCOVERY_DELAY_SECONDS=3
 MAX_DISCOVERY_QUERIES=40
 MAX_SEARCH_RESULTS_PER_QUERY=20
 WEBSITE_DELAY_SECONDS=2
-SMTP_DELAY_SECONDS=3
+OPENROUTER_DELAY_SECONDS=4
 MAX_PAGES_PER_SITE=5
 REQUEST_TIMEOUT_SECONDS=20
 DDGS_TIMEOUT_SECONDS=15
@@ -139,6 +135,7 @@ python pipeline.py --limit 5 --json
 
 Expected output:
 - Discovery queries execute against DuckDuckGo
+- Instagram follow-up website lookups use DuckDuckGo with retry logic
 - Websites are crawled for contact data
 - SMTP verification runs on discovered emails
 - Results printed as JSON to terminal
@@ -148,9 +145,9 @@ Expected output:
 
 ## Troubleshooting
 
-### "ModuleNotFoundError: No module named 'ddgs'"
-Install the missing dependency: `pip install ddgs`
-(This is the most common issue since `requirements.txt` is incomplete)
+### "ModuleNotFoundError" for a project package
+Run tests through `pytest` from the repo root. The test suite now includes
+`tests/conftest.py` so local imports resolve from the project root.
 
 ### "Could not load seen identities from sheet"
 - Check that `GOOGLE_SHEET_NAME` matches your spreadsheet name exactly

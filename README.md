@@ -7,11 +7,13 @@ An automated B2B lead generation tool that discovers English-speaking fitness co
 ## What it does
 
 1. **Discovers** fitness coaches via DuckDuckGo keyword searches (no city targeting — global reach)
-2. **Crawls** their websites and link hub pages for emails, booking links, Instagram, and social profiles
-3. **Verifies** email deliverability via SMTP
-4. **Scores** leads based on ICP signals (email validity, online coaching presence, digital seller indicators)
-5. **Deduplicates** across all prior runs
-6. **Exports** to Google Sheets split by tier: Hot / Good / Review
+2. **Looks up** coach websites via DuckDuckGo with enhanced retry logic for one-off queries
+3. **Crawls** their websites and link hub pages for emails, booking links, Instagram, and social profiles
+4. **Generates** personalized icebreakers for each lead using AI analysis of their website content
+5. **Verifies** email deliverability via SMTP
+6. **Scores** leads based on ICP signals (email validity, online coaching presence, digital seller indicators)
+7. **Deduplicates** across all prior runs
+8. **Exports** to Google Sheets split by tier: Hot / Good / Review
 
 **Target:** 30–50 fresh, usable leads per run.
 
@@ -25,6 +27,8 @@ Discovery (DuckDuckGo keyword search)
 Pre-filtering (blocklists, seen-lead suppression, query rotation)
     ↓
 Enrichment (website crawl, email extraction, link hub resolution)
+    ↓
+Icebreaker generation (AI-powered personalized compliments)
     ↓
 Verification (parallel SMTP check, disk-cached)
     ↓
@@ -90,11 +94,8 @@ GOOGLE_SERVICE_ACCOUNT_FILE=service_account.json.json
 
 # AI (optional — leave false for faster heuristic-only runs)
 ENABLE_AI=false
-GEMINI_API_KEY=
-
-# Instagram (currently unused — Instaloader is blocked by IG)
-IG_USERNAME=
-IG_PASSWORD=
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openai/gpt-4o-mini
 
 # Discovery
 DISCOVERY_DELAY_SECONDS=3
@@ -158,7 +159,9 @@ All settings are in `config/settings.py` or set via environment variables in `.e
 | `MAX_SEARCH_RESULTS_PER_QUERY` | `20` | Results pulled from each query |
 | `hot_lead_threshold` | `65` | Minimum score for Hot tier |
 | `good_lead_threshold` | `45` | Minimum score for Good tier |
-| `ENABLE_AI` | `false` | Use Gemini for classification (slower, requires API key) |
+| `ENABLE_AI` | `false` | Use OpenRouter for classification (slower, requires API key) |
+| `ICEBREAKER_TONE` | `professional and respectful` | Tone/style for AI-generated icebreakers |
+| `ICEBREAKER_LENGTH` | `2` | Number of sentences for icebreakers (1-3 recommended) |
 
 ### Adding keywords
 
@@ -195,6 +198,7 @@ The pipeline does NOT use city-based searches. Instead:
 2. **Intent modifiers** — e.g. `"online fitness coach" "book a call"`, `"fitness coach" "work with me"`
 3. **Platform searches** — e.g. `"fitness coach" site:kajabi.com` — finds coaches on course platforms
 4. **Link hub searches** — e.g. `"fat loss coach" site:linktr.ee` — finds coaches' hub pages
+5. **Individual website lookups** — when an Instagram lead needs a real site, the pipeline uses DuckDuckGo with enhanced retry logic
 
 Each run searches 40 queries from a pool of ~1,274. The pool rotates each run so different keyword subsets are covered over time.
 
@@ -214,6 +218,7 @@ This means each run produces **net-new leads** — you're not re-processing the 
 ## How email verification works
 
 1. **On-page extraction** — regex scan of crawled pages for emails
+   Vendor telemetry addresses such as Wix/Sentry service mailboxes are filtered out.
 2. **Email guessing** — if no email found, generate patterns like `{first}@{domain}` and `{first}.{last}@{domain}`
 3. **SMTP verification** — check if the mailbox actually exists via MX lookup + SMTP RCPT command
 4. **Disk cache** — verified results are cached in `.cache/smtp/` so repeated runs are faster
@@ -231,17 +236,20 @@ prospecting/
 │   └── cities.py               # DEPRECATED — not used
 ├── discovery/
 │   ├── duckduckgo_search.py    # DuckDuckGo search + query builder
+│   ├── individual_search.py    # Enhanced DDG single-query lookup
 │   └── web_search.py          # URL filtering and classification
 ├── extraction/
 │   ├── website_crawler.py      # Website content extraction
 │   ├── email_extractor.py     # Regex email finding
-│   ├── email_guesser.py        # Email pattern generation
 │   └── linktree_parser.py      # Link hub page parsing
 ├── enrichment/
-│   └── gemini_classifier.py   # AI or heuristic classification
+│   ├── ai_classifier.py        # OpenRouter or heuristic classification
+│   └── icebreaker_generator.py # AI-powered personalized icebreakers
 ├── verification/
-│   ├── smtp_verifier.py        # Email SMTP validation
-│   └── deduplicator.py         # Lead deduplication
+│   ├── email_verifier.py      # Unified Disify + SMTP verification
+│   ├── disify_client.py       # Disify API for domain validation
+│   ├── smtp_verifier.py       # Low-level SMTP probe (legacy)
+│   └── deduplicator.py        # Lead deduplication
 ├── scoring/
 │   └── lead_scorer.py         # 0–100 heuristic scoring
 ├── export/
@@ -251,7 +259,8 @@ prospecting/
 ├── .env                       # Credentials (NOT committed)
 ├── .env.example               # Template
 ├── .cache/
-│   ├── smtp/                  # Cached SMTP verification results
+│   ├── email_verification/    # Cached email verification results
+│   ├── disify/                # Cached Disify API responses
 │   └── runs/                  # Checkpoint files from each run
 ├── service_account.json.json  # Google service account key
 └── requirements.txt
@@ -259,12 +268,36 @@ prospecting/
 
 ---
 
+## Advanced Features
+
+### Personalized Icebreakers
+
+The pipeline can automatically generate personalized, authentic opening lines for cold outreach emails based on each lead's website content.
+
+**What it does:**
+- Analyzes the actual text content of each lead's website
+- Uses OpenRouter AI to generate specific compliments that reference real details
+- Stores the icebreaker in the `ice_breaker` column in Google Sheets
+
+**Configuration:**
+```env
+ICEBREAKER_TONE=professional and respectful
+ICEBREAKER_LENGTH=2
+```
+
+**Example output:**
+> "I noticed your emphasis on science-based programming tailored to individual body types—that's a refreshing approach in an industry full of cookie-cutter plans."
+
+**See:** `docs/ICEBREAKER.md` for full documentation
+
+---
+
 ## Known limitations
 
-- **Instagram data** — Instaloader is blocked by Instagram. IG data is extracted from DuckDuckGo snippets instead. Follower counts are usually 0.
-- **SMTP verification** — some mail servers are slow or silently reject checks, resulting in "unknown" status. The cache mitigates this.
+- **Instagram data** — IG data is extracted from DuckDuckGo snippets instead of direct Instagram scraping. Follower counts are often unavailable.
+- **Single-query stability** — coach-specific website lookups use DuckDuckGo with retry logic; results may occasionally be inconsistent.
+- **SMTP verification** — some mail servers block verification probes, resulting in "risky" status. Disify provides domain-level validation as a fallback.
 - **JavaScript sites** — website crawler uses raw HTML (no JS rendering). SPA sites may not crawl well.
-- **Email guessing** — generates plausible patterns but doesn't verify them until the batch SMTP step.
 - **No resume mode** — interrupted runs restart from scratch. Use checkpoint files in `.cache/runs/` to manually recover.
 
 ---
@@ -276,10 +309,11 @@ prospecting/
 - DuckDuckGo may be rate-limiting — increase `DISCOVERY_DELAY_SECONDS`
 - Your IP may be temporarily blocked by DuckDuckGo — wait and retry
 
-**All emails show "unknown" status**
-- The domain's mail server may be slow to respond
-- Check `.cache/smtp/` for individual verification results
-- Free SMTP verification is inherently unreliable — consider a paid service for production
+**All emails show "risky" or "invalid" status**
+- Many mail servers block SMTP verification probes
+- Check `.cache/email_verification/` for individual results
+- Disify provides domain-level validation (format, MX, disposable) even when SMTP fails
+- "risky" means domain is valid but mailbox couldn't be confirmed
 
 **Pipeline finds the same leads repeatedly**
 - This should be fixed by seen-lead suppression
@@ -297,6 +331,5 @@ prospecting/
 
 If credentials are ever exposed, rotate immediately:
 
-1. Instagram: change password and update `IG_PASSWORD` in `.env`
-2. Gemini: regenerate API key in Google AI Studio and update `GEMINI_API_KEY` in `.env`
-3. Google service account: revoke the old key in Google Cloud Console, create a new one, download and replace `service_account.json.json`
+1. OpenRouter: revoke the old key in OpenRouter and update `OPENROUTER_API_KEY` in `.env`
+2. Google service account: revoke the old key in Google Cloud Console, create a new one, download and replace `service_account.json.json`
