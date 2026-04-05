@@ -133,19 +133,18 @@ def guess_emails(contact_name: str, domain: str) -> List[str]:
 
     first, last = _extract_real_name(contact_name) if contact_name else ("", "")
 
-    # Build guess list: generic first (most reliable), then name-based
+    # Build guess list: name-based first, then generic
     guesses: List[str] = []
+    if first:
+        guesses.append(f"{first}@{domain}")
+        if last and last != first:
+            guesses.append(f"{first}.{last}@{domain}")
+            guesses.append(f"{first}{last}@{domain}")
 
     # Always include generic patterns — these are the most common for solo coaches
     guesses.append(f"hello@{domain}")
     guesses.append(f"info@{domain}")
     guesses.append(f"contact@{domain}")
-
-    if first and len(first) >= 2 and first.isalpha():
-        guesses.append(f"{first}@{domain}")
-        if last and last != first and len(last) >= 2 and last.isalpha():
-            guesses.append(f"{first}.{last}@{domain}")
-            guesses.append(f"{first}{last}@{domain}")
 
     # Dedupe while preserving order
     seen: set[str] = set()
