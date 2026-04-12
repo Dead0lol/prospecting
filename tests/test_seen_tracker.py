@@ -76,7 +76,8 @@ def test_remember_and_match_seen_identities(monkeypatch) -> None:
     assert "hello@example.com" in seen["emails"]
     assert "coachone" in seen["instagrams"]
     assert "coachexample.com" in seen["domains"]
-    assert "linktr.ee" in seen["domains"]
+    # linktr.ee is a link-hub meta domain and must NOT be tracked as seen
+    assert "linktr.ee" not in seen["domains"]
     assert seen_tracker.is_seen_lead(
         Lead(
             email="hello@example.com",

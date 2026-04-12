@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from config.blocklists import canonical_domain
+from config.blocklists import canonical_domain, is_blocked_domain, is_link_hub_domain
 from config.settings import settings
 from export.sheets_writer import SheetsWriter
 from models.lead import Lead
@@ -24,6 +24,32 @@ _FREE_EMAIL_PROVIDERS = {
     "hotmail.co.uk", "outlook.co.uk", "comcast.net", "att.net",
     "verizon.net", "sbcglobal.net", "cox.net", "charter.net",
 }
+
+# Domains that should NEVER be tracked as "seen" — they are platforms, not
+# individual coach websites.  Tracking them poisons the seen set and causes
+# every lead sourced from that platform to be rejected.
+_META_DOMAINS = {
+    "instagram.com", "facebook.com", "twitter.com", "x.com",
+    "tiktok.com", "youtube.com", "linkedin.com", "pinterest.com",
+    "threads.net",
+}
+
+
+def _is_meta_domain(domain: str) -> bool:
+    """Return True if *domain* is a social/link-hub/blocked platform domain.
+
+    These domains must never enter the seen-domains set because they are
+    shared infrastructure, not individual coach websites.
+    """
+    if not domain:
+        return False
+    if domain in _META_DOMAINS:
+        return True
+    if is_blocked_domain(domain):
+        return True
+    if is_link_hub_domain(domain):
+        return True
+    return False
 
 
 def _empty_seen() -> SeenIdentityMap:
@@ -103,9 +129,11 @@ def _load_seen_cache() -> SeenIdentityMap | None:
                 if _canonical_instagram_username(str(item).strip())
             },
             "domains": {
-                canonical_domain(str(item).strip()) or str(item).strip().lower()
+                d
                 for item in data.get("domains", [])
                 if str(item).strip()
+                for d in [canonical_domain(str(item).strip()) or str(item).strip().lower()]
+                if d and not _is_meta_domain(d)
             },
         }
     except Exception:
@@ -153,7 +181,7 @@ def load_seen_identities(log) -> SeenIdentityMap:
             str(row.get("source_url", "")).strip(),
         ]:
             domain = canonical_domain(url)
-            if domain:
+            if domain and not _is_meta_domain(domain):
                 seen["domains"].add(domain)
 
     email_domains = _enrich_domains_from_emails(seen)
@@ -203,7 +231,7 @@ def is_seen_lead(lead: Lead, seen: SeenIdentityMap) -> bool:
 
     for url in [lead.website, lead.source_url]:
         domain = canonical_domain(url)
-        if domain and domain in seen["domains"]:
+        if domain and not _is_meta_domain(domain) and domain in seen["domains"]:
             return True
 
     return False
@@ -221,7 +249,7 @@ def remember_lead_identities(lead: Lead, seen: SeenIdentityMap) -> None:
 
     for url in [lead.website, lead.source_url]:
         domain = canonical_domain(url)
-        if domain:
+        if domain and not _is_meta_domain(domain):
             seen["domains"].add(domain)
 
     persist_seen_identities(seen)
