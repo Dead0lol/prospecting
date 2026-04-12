@@ -440,7 +440,9 @@ def _find_website_for_ig_lead(lead: Lead) -> None:
 # ---------------------------------------------------------------------------
 
 
-def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead | None:
+def process_instagram_candidate(
+    candidate: Dict[str, str], country: str, seen: dict | None = None
+) -> Lead | None:
     """Process a single Instagram candidate into a Lead.
 
     Uses DuckDuckGo snippet data (name, followers, bio) instead of
@@ -483,6 +485,15 @@ def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead
         log(f"  Dropping IG-only lead (no website found): {username}")
         return None
 
+    # Early seen-domain check: skip crawling if the resolved website domain
+    # is already in our seen set.  This avoids wasting 10-15s per candidate
+    # on website crawls that will just be rejected later anyway.
+    if seen:
+        resolved_domain = canonical_domain(lead.website)
+        if resolved_domain and resolved_domain in seen["domains"]:
+            log(f"  Skipping: resolved domain {resolved_domain} already seen (pre-crawl)")
+            return None
+
     enrich_lead_from_website(lead)
     return lead
 
@@ -492,7 +503,9 @@ def process_instagram_candidate(candidate: Dict[str, str], country: str) -> Lead
 # ---------------------------------------------------------------------------
 
 
-def process_website_candidate(candidate: Dict[str, str], country: str) -> Lead | None:
+def process_website_candidate(
+    candidate: Dict[str, str], country: str, seen: dict | None = None
+) -> Lead | None:
     """Process a website search result into a Lead (or None if junk)."""
     url = candidate.get("url", "")
     title = candidate.get("title", "")
@@ -510,6 +523,14 @@ def process_website_candidate(candidate: Dict[str, str], country: str) -> Lead |
         log(
             f"  Resolved link hub -> website={bool(targets.get('website'))} instagram={bool(resolved_instagram)}"
         )
+
+    # Early seen-domain check: skip crawling if the resolved domain is
+    # already known.  Saves 10-15s of website crawling per candidate.
+    if seen:
+        resolved_domain = canonical_domain(resolved_website)
+        if resolved_domain and resolved_domain in seen["domains"]:
+            log(f"  Skipping: resolved domain {resolved_domain} already seen (pre-crawl)")
+            return None
 
     lead = Lead(
         business_name=title or urlparse(url).netloc,
@@ -597,7 +618,7 @@ def run(country: str = "US", limit: int = 100) -> List[Lead]:
                 if tried >= limit * 3:  # Don't try forever
                     break
                 tried += 1
-                lead = process_website_candidate(candidate, country)
+                lead = process_website_candidate(candidate, country, seen=seen)
                 if lead:
                     if is_seen_lead(lead, seen):
                         log("  Skipping seen website lead")
@@ -619,7 +640,7 @@ def run(country: str = "US", limit: int = 100) -> List[Lead]:
                 if i > remaining * 2:  # Don't try too many
                     break
                 log(f"[{i}/{len(ig_candidates)}]")
-                lead = process_instagram_candidate(candidate, country)
+                lead = process_instagram_candidate(candidate, country, seen=seen)
                 if lead:
                     if is_seen_lead(lead, seen):
                         log("  Skipping seen Instagram lead")

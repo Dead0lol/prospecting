@@ -14,9 +14,40 @@ SEEN_CACHE_PATH = settings.output_cache_dir / "seen_identities.json"
 SEEN_CACHE_TTL = timedelta(hours=12)
 SeenIdentityMap = dict[str, set[str]]
 
+# Free/generic email providers whose domains should NOT be added to the seen
+# domains set (otherwise we'd block every lead on gmail.com, etc.)
+_FREE_EMAIL_PROVIDERS = {
+    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com",
+    "icloud.com", "mail.com", "protonmail.com", "zoho.com", "yandex.com",
+    "live.com", "msn.com", "me.com", "mac.com", "googlemail.com",
+    "proton.me", "pm.me", "hey.com", "fastmail.com", "yahoo.co.uk",
+    "hotmail.co.uk", "outlook.co.uk", "comcast.net", "att.net",
+    "verizon.net", "sbcglobal.net", "cox.net", "charter.net",
+}
+
 
 def _empty_seen() -> SeenIdentityMap:
     return {"emails": set(), "instagrams": set(), "domains": set()}
+
+
+def _enrich_domains_from_emails(seen: SeenIdentityMap) -> int:
+    """Extract domains from known emails and add them to seen domains.
+
+    If we've already seen info@coachjane.com, then coachjane.com should be
+    treated as a seen domain too.  Skips free/generic email providers.
+    Returns the number of new domains added.
+    """
+    added = 0
+    for email in seen["emails"]:
+        if "@" not in email:
+            continue
+        domain = email.rsplit("@", 1)[1].strip().lower()
+        if not domain or domain in _FREE_EMAIL_PROVIDERS:
+            continue
+        if domain not in seen["domains"]:
+            seen["domains"].add(domain)
+            added += 1
+    return added
 
 
 def _canonical_instagram_username(url_or_username: str) -> str:
@@ -84,9 +115,13 @@ def _load_seen_cache() -> SeenIdentityMap | None:
 def load_seen_identities(log) -> SeenIdentityMap:
     cached = _load_seen_cache()
     if cached is not None:
+        email_domains = _enrich_domains_from_emails(cached)
+        if email_domains:
+            persist_seen_identities(cached)
         log(
             f"Loaded seen identities from cache: {len(cached['emails'])} emails, "
-            f"{len(cached['instagrams'])} IGs, {len(cached['domains'])} domains"
+            f"{len(cached['instagrams'])} IGs, {len(cached['domains'])} domains "
+            f"(+{email_domains} domains from emails)"
         )
         return cached
 
@@ -121,10 +156,12 @@ def load_seen_identities(log) -> SeenIdentityMap:
             if domain:
                 seen["domains"].add(domain)
 
+    email_domains = _enrich_domains_from_emails(seen)
     persist_seen_identities(seen)
     log(
         f"Loaded seen identities from sheet: {len(seen['emails'])} emails, "
-        f"{len(seen['instagrams'])} IGs, {len(seen['domains'])} domains"
+        f"{len(seen['instagrams'])} IGs, {len(seen['domains'])} domains "
+        f"(+{email_domains} domains from emails)"
     )
     return seen
 
